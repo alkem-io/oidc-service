@@ -1,9 +1,7 @@
-name: PR Build
+name: Container Build
 
 on:
-  pull_request:
-    paths:
-      - '**'
+  workflow_dispatch:
 
 jobs:
   build:

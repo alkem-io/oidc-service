@@ -14,6 +14,8 @@ paths:
       summary: Resolve Hydra login challenge
       description: Handles Hydra login challenge callbacks and returns a redirect to Synapse.
       operationId: getLoginChallenge
+      security:
+        - HydraLoginChallenge: []
       parameters:
         - name: login_challenge
           in: query
@@ -46,6 +48,8 @@ paths:
       summary: Resolve Hydra consent challenge
       description: Handles Hydra consent challenge callbacks and authorises the session.
       operationId: getConsentChallenge
+      security:
+        - HydraConsentChallenge: []
       parameters:
         - name: consent_challenge
           in: query
@@ -76,13 +80,19 @@ paths:
     get:
       summary: Liveness check
       operationId: getLiveness
+      security: []
       responses:
-        "204":
+        "200":
           description: Service process is running.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LivenessState'
   /health/ready:
     get:
       summary: Readiness check
       operationId: getReadiness
+      security: []
       responses:
         "200":
           description: Service is ready to accept challenges.
@@ -91,11 +101,22 @@ paths:
               schema:
                 $ref: '#/components/schemas/ReadinessState'
         "503":
-          $ref: '#/components/responses/Maintenance'
+          description: Service cannot accept challenges.
+          headers:
+            Retry-After:
+              description: Seconds until maintenance is expected to lift (when maintenance is active).
+              schema:
+                type: integer
+                minimum: 0
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessState'
   /metrics:
     get:
       summary: Prometheus metrics endpoint
       operationId: getMetrics
+      security: []
       responses:
         "200":
           description: Text-based metrics exposition format.
@@ -104,7 +125,27 @@ paths:
               schema:
                 type: string
 components:
+  securitySchemes:
+    HydraLoginChallenge:
+      type: apiKey
+      in: query
+      name: login_challenge
+      description: Hydra-issued login challenge token attached to callback requests.
+    HydraConsentChallenge:
+      type: apiKey
+      in: query
+      name: consent_challenge
+      description: Hydra-issued consent challenge token attached to callback requests.
   schemas:
+    LivenessState:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [alive]
+          description: Indicates the process is running.
     ErrorPayload:
       type: object
       required:

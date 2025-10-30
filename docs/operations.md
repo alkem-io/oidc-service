@@ -8,31 +8,36 @@ optional `Retry-After` header derived from `OIDC_MAINTENANCE_RETRY`.
 
 1. **Toggle via Docker Compose**
     - Run commands from the `alkem-io/server` repository root where the
-       `quickstart-services.yml` stack is defined (or update `-f` to point to that
-       file).
-   - Persist the flag by appending `OIDC_MAINTENANCE_MODE=true` to your `.env`
-     (or a compose override file) and then run:
-     ```sh
-     docker compose -f quickstart-services.yml up -d oidc-service
-     ```
-   - Alternatively, set it inline when recreating the service:
-     ```sh
-     OIDC_MAINTENANCE_MODE=true docker compose -f quickstart-services.yml up -d oidc-service
-     ```
-   In both cases the container must be recreated or restarted for the new
-   environment to take effect.
+      `quickstart-services.yml` stack is defined (or update `-f` to point to that
+      file).
+    - Persist the flag by appending `OIDC_MAINTENANCE_MODE=true` to your `.env`
+      (or a compose override file) and then run:
+    ```sh
+    docker compose -f quickstart-services.yml up -d oidc-service
+    ```
+    - Alternatively, set it inline when recreating the service:
+    ```sh
+    OIDC_MAINTENANCE_MODE=true docker compose -f quickstart-services.yml up -d oidc-service
+    ```
+    In both cases the container must be recreated or restarted for the new
+    environment to take effect.
 
 2. **Toggle via Kubernetes**
    - Patch the deployment with `kubectl set env deployment/oidc-service OIDC_MAINTENANCE_MODE=true`.
    - Optionally set `OIDC_MAINTENANCE_RETRY=600` to emit a 10 minute retry hint.
 
 3. **Validate state**
-   ```sh
-   curl -i http://OIDC_SERVICE_HOST/health/ready
-   curl -i "http://OIDC_SERVICE_HOST/v1/oidc/login?login_challenge=test"
-   ```
-   Expect `HTTP 503` with `{"error":"maintenance_mode"...}` while maintenance is
-   enabled.
+    - Ensure the service is healthy:
+    ```sh
+    curl -i http://OIDC_SERVICE_HOST/health/ready
+    ```
+    - Regenerate a Hydra login challenge using the procedure from Quickstart Step 6
+      (or the equivalent `curl` + `awk` command) and invoke the login endpoint:
+    ```sh
+    curl -i "http://OIDC_SERVICE_HOST/v1/oidc/login?login_challenge=${LOGIN_CHALLENGE}"
+    ```
+    Expect `HTTP 503` with `{"error":"maintenance_mode"...}` while maintenance is
+    enabled.
 
 4. **Disable maintenance** by removing or setting the toggle to `false` and
    redeploying.

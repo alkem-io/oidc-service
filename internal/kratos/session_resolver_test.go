@@ -14,7 +14,9 @@ import (
 func TestSessionResolverIdentityIDSuccess(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "/sessions/whoami", r.URL.Path)
-		require.Contains(t, r.Header.Get("Cookie"), "ory_kratos_session=session-token")
+		cookie, err := r.Cookie("ory_kratos_session")
+		require.NoError(t, err)
+		require.Equal(t, "session-token", cookie.Value)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"identity":{"id":"identity-id"}}`))
 	}))
@@ -41,6 +43,24 @@ func TestSessionResolverIdentityIDUnauthorized(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, "", id)
 	require.ErrorIs(t, err, challenge.ErrIdentitySessionInvalid)
+}
+
+func TestSessionResolverIdentityIDCustomCookieName(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cookie, err := r.Cookie("kratos_custom_cookie")
+		require.NoError(t, err)
+		require.Equal(t, "session-token", cookie.Value)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"identity":{"id":"identity-id"}}`))
+	}))
+	defer server.Close()
+
+	resolver, err := NewSessionResolver(SessionConfig{PublicURL: server.URL, CookieName: "kratos_custom_cookie"})
+	require.NoError(t, err)
+
+	id, err := resolver.IdentityID(context.Background(), "session-token")
+	require.NoError(t, err)
+	require.Equal(t, "identity-id", id)
 }
 
 func TestSessionResolverIdentityIDServerError(t *testing.T) {

@@ -25,6 +25,7 @@ func TestLoadSuccess(t *testing.T) {
 	require.Equal(t, "https://hydra-admin.local", cfg.HydraAdminURL)
 	require.Equal(t, "https://kratos-public.local", cfg.KratosPublicURL)
 	require.Equal(t, time.Duration(5)*time.Second, cfg.ReadinessTimeout)
+	require.Equal(t, "ory_kratos_session", cfg.KratosSessionCookie)
 
 	state := cfg.Maintenance()
 	require.True(t, state.Enabled)
@@ -107,6 +108,19 @@ func TestMaintenanceDisabled(t *testing.T) {
 	require.Nil(t, state.RetryAfter)
 }
 
+func TestLoadCustomSessionCookie(t *testing.T) {
+	setEnv(t, map[string]string{
+		"OIDC_HYDRA_ADMIN_URL":       "https://hydra-admin.local",
+		"OIDC_KRATOS_ADMIN_URL":      "https://kratos-admin.local",
+		"OIDC_KRATOS_PUBLIC_URL":     "https://kratos-public.local",
+		"OIDC_KRATOS_SESSION_COOKIE": " kratos_custom ",
+	})
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, "kratos_custom", cfg.KratosSessionCookie)
+}
+
 func setEnv(t *testing.T, values map[string]string) {
 	t.Helper()
 
@@ -114,6 +128,7 @@ func setEnv(t *testing.T, values map[string]string) {
 		"OIDC_HYDRA_ADMIN_URL",
 		"OIDC_KRATOS_ADMIN_URL",
 		"OIDC_KRATOS_PUBLIC_URL",
+		"OIDC_KRATOS_SESSION_COOKIE",
 		"OIDC_ADMIN_TOKEN",
 		"OIDC_MAINTENANCE_MODE",
 		"OIDC_MAINTENANCE_RETRY",

@@ -60,8 +60,9 @@ func main() {
 	}
 
 	sessionResolver, err := kratos.NewSessionResolver(kratos.SessionConfig{
-		PublicURL: cfg.KratosPublicURL,
-		Timeout:   cfg.ReadinessTimeout,
+		PublicURL:  cfg.KratosPublicURL,
+		Timeout:    cfg.ReadinessTimeout,
+		CookieName: cfg.KratosSessionCookie,
 	})
 	if err != nil {
 		fatal("configure kratos session resolver", err)
@@ -94,7 +95,7 @@ func main() {
 		Challenge:       challengeService,
 		Metrics:         metrics,
 		SessionResolver: sessionResolver,
-		SessionCookie:   "ory_kratos_session",
+		SessionCookie:   cfg.KratosSessionCookie,
 	})
 
 	srv := &http.Server{

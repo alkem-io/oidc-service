@@ -43,7 +43,16 @@ func TestHealthEndpointsMatchContract(t *testing.T) {
 	liveRec := httptest.NewRecorder()
 	router.ServeHTTP(liveRec, liveReq)
 
-	if liveRec.Code != http.StatusNoContent {
-		t.Fatalf("expected liveness status %d, got %d", http.StatusNoContent, liveRec.Code)
+	if liveRec.Code != http.StatusOK {
+		t.Fatalf("expected liveness status %d, got %d", http.StatusOK, liveRec.Code)
+	}
+
+	var livePayload map[string]any
+	if err := json.Unmarshal(liveRec.Body.Bytes(), &livePayload); err != nil {
+		t.Fatalf("failed to parse liveness response: %v", err)
+	}
+
+	if status, ok := livePayload["status"].(string); !ok || status != "alive" {
+		t.Fatalf("expected liveness payload to contain status 'alive', got %v", livePayload["status"])
 	}
 }

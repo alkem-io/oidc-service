@@ -12,15 +12,16 @@ import (
 
 // ServiceConfig captures runtime configuration sourced from environment variables.
 type ServiceConfig struct {
-	HydraAdminURL     string        `envconfig:"HYDRA_ADMIN_URL" required:"true"`
-	KratosAdminURL    string        `envconfig:"KRATOS_ADMIN_URL" required:"true"`
-	KratosPublicURL   string        `envconfig:"KRATOS_PUBLIC_URL" required:"true"`
-	AuthToken         string        `envconfig:"ADMIN_TOKEN"`
-	MaintenanceMode   bool          `envconfig:"MAINTENANCE_MODE" default:"false"`
-	RetryAfterSeconds int           `envconfig:"MAINTENANCE_RETRY" default:"0"`
-	AllowInsecureHTTP bool          `envconfig:"ALLOW_INSECURE_HTTP" default:"false"`
-	ReadinessTimeout  time.Duration `envconfig:"READINESS_TIMEOUT" default:"5s"`
-	LogLevel          string        `envconfig:"LOG_LEVEL" default:"info"`
+	HydraAdminURL       string        `envconfig:"HYDRA_ADMIN_URL" required:"true"`
+	KratosAdminURL      string        `envconfig:"KRATOS_ADMIN_URL" required:"true"`
+	KratosPublicURL     string        `envconfig:"KRATOS_PUBLIC_URL" required:"true"`
+	KratosSessionCookie string        `envconfig:"KRATOS_SESSION_COOKIE" default:"ory_kratos_session"`
+	AuthToken           string        `envconfig:"ADMIN_TOKEN"`
+	MaintenanceMode     bool          `envconfig:"MAINTENANCE_MODE" default:"false"`
+	RetryAfterSeconds   int           `envconfig:"MAINTENANCE_RETRY" default:"0"`
+	AllowInsecureHTTP   bool          `envconfig:"ALLOW_INSECURE_HTTP" default:"false"`
+	ReadinessTimeout    time.Duration `envconfig:"READINESS_TIMEOUT" default:"5s"`
+	LogLevel            string        `envconfig:"LOG_LEVEL" default:"info"`
 }
 
 // MaintenanceState exposes the cached maintenance toggle information.
@@ -40,11 +41,18 @@ var (
 	}
 )
 
+const defaultKratosSessionCookie = "ory_kratos_session"
+
 // Load reads service configuration using the OIDC prefix (OIDC_* env vars).
 func Load() (*ServiceConfig, error) {
 	cfg := &ServiceConfig{}
 	if err := envconfig.Process("OIDC", cfg); err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
+	}
+
+	cfg.KratosSessionCookie = strings.TrimSpace(cfg.KratosSessionCookie)
+	if cfg.KratosSessionCookie == "" {
+		cfg.KratosSessionCookie = defaultKratosSessionCookie
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -70,6 +78,10 @@ func (cfg *ServiceConfig) validate() error {
 
 	if _, ok := supportedLogLevels[strings.ToLower(cfg.LogLevel)]; !ok {
 		return fmt.Errorf("OIDC_LOG_LEVEL must be one of debug, info, warn, error")
+	}
+
+	if strings.TrimSpace(cfg.KratosSessionCookie) == "" {
+		return fmt.Errorf("OIDC_KRATOS_SESSION_COOKIE is required")
 	}
 
 	return nil

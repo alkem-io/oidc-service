@@ -59,9 +59,33 @@ A healthy service returns a payload similar to:
 
 ## 6. Exercise the login flow
 
-```sh
-curl -i "http://localhost:8085/v1/oidc/login?login_challenge=test"
-```
+1. Mint a real Hydra login challenge. With the quickstart stack the Hydra
+   public endpoint is `http://localhost:4444`, Synapse is
+   `http://localhost:8008`, and the client ID is exposed via the
+   `SYNAPSE_OIDC_CLIENT_ID` environment variable:
+
+    ```sh
+    LOGIN_CHALLENGE=$(curl -s -D - -o /dev/null \
+      -G "${HYDRA_PUBLIC_URL:-http://localhost:4444}/oauth2/auth" \
+      --data-urlencode client_id="${SYNAPSE_OIDC_CLIENT_ID}" \
+      --data-urlencode redirect_uri="${SYNAPSE_PUBLIC_URL:-http://localhost:8008}/_synapse/client/oidc/callback" \
+      --data-urlencode response_type=code \
+      --data-urlencode scope="openid profile email" \
+      --data-urlencode state=local-cli-test \
+      --data-urlencode prompt=login \
+      | awk -F'login_challenge=' '/^Location:/ {split($2,v,"&"); print v[1]; exit}')
+    echo "LOGIN_CHALLENGE=${LOGIN_CHALLENGE}"
+    ```
+
+   Hydra responds with `302 Found`; the inline `awk` command extracts the
+   `login_challenge` query value from the `Location` header and stores it in the
+   shell variable shown in the final `echo`.
+
+2. Call the OIDC service with the captured challenge:
+
+    ```sh
+    curl -i "http://localhost:8085/v1/oidc/login?login_challenge=${LOGIN_CHALLENGE}"
+    ```
 
 Expect an HTTP `302` redirect when Hydra accepts the challenge, or structured
 `4xx` errors when the challenge is invalid or missing identity traits.
@@ -74,11 +98,13 @@ docker run --rm \
   -e OIDC_MAINTENANCE_MODE=true \
   -p 8085:8080 \
   docker.io/alkemio/oidc-service:latest
-curl -i http://localhost:8085/v1/oidc/login?login_challenge=test
+# regenerate LOGIN_CHALLENGE by rerunning the Step 6 command
+curl -i "http://localhost:8085/v1/oidc/login?login_challenge=${LOGIN_CHALLENGE}"
 ```
 
 During maintenance the service responds with HTTP `503` and a JSON body
-explaining the outage window.
+explaining the outage window. Hydra invalidates challenges after use, so rerun
+the Step 6 command to obtain a fresh token before each invocation.
 
 ## 8. Inspect Prometheus metrics
 

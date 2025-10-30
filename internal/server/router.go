@@ -70,6 +70,10 @@ func NewRouter(opts Options) http.Handler {
 		}
 
 		statusCode := http.StatusOK
+		if readiness.Status != "ready" {
+			statusCode = http.StatusServiceUnavailable
+			payload["status"] = readiness.Status
+		}
 		if state.Enabled {
 			statusCode = http.StatusServiceUnavailable
 			payload["status"] = "maintenance"

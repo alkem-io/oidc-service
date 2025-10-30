@@ -183,10 +183,10 @@ components:
           enum: [ready, initializing, maintenance, degraded]
         hydra:
           type: string
-          enum: [ok, unreachable, unauthorized]
+          enum: [ok, timeout, unavailable, unknown]
         kratos:
           type: string
-          enum: [ok, unreachable, unauthorized]
+          enum: [ok, timeout, unavailable, unknown]
         maintenance:
           type: boolean
           description: Indicates the maintenance toggle state.

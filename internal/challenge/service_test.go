@@ -100,6 +100,105 @@ func TestResolveLoginFetchesIdentityAndSetsContext(t *testing.T) {
 	require.Equal(t, traits, ctxMap["traits"])
 }
 
+func TestResolveLoginUsesIdentityHintProvider(t *testing.T) {
+	login := hydraAdmin.NewOAuth2LoginRequestWithDefaults()
+	login.SetChallenge("login-challenge")
+
+	var capturedSubject string
+	var providerCalls int
+
+	mock := &hydraClientMock{
+		getLogin: func(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2LoginRequest, *http.Response, error) {
+			return login, &http.Response{StatusCode: http.StatusOK}, nil
+		},
+		acceptLogin: func(ctx context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2LoginRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
+			capturedSubject = body.Subject
+			return hydraAdmin.NewOAuth2RedirectTo("https://redirect.example"), &http.Response{StatusCode: http.StatusOK}, nil
+		},
+	}
+
+	idFetcher := identityFetcherStub{fetch: func(ctx context.Context, identityID string) (*IdentityProfile, error) {
+		require.Equal(t, "identity-hint", identityID)
+		return &IdentityProfile{
+			ID:          identityID,
+			Email:       "user@example.com",
+			DisplayName: "Example User",
+		}, nil
+	}}
+
+	svc := NewService(Options{Hydra: mock, Identity: idFetcher})
+
+	provider := IdentityHintFunc(func(ctx context.Context) (string, error) {
+		providerCalls++
+		return "identity-hint", nil
+	})
+
+	ctx := WithIdentityHintProvider(context.Background(), provider)
+	resolution, err := svc.ResolveLogin(ctx, "login-challenge")
+	require.NoError(t, err)
+	require.NotNil(t, resolution)
+	require.Equal(t, "https://redirect.example", resolution.RedirectURL)
+	require.Equal(t, "user@example.com", capturedSubject)
+	require.Equal(t, 1, providerCalls)
+}
+
+func TestResolveLoginMissingHintReturnsSessionRequired(t *testing.T) {
+	login := hydraAdmin.NewOAuth2LoginRequestWithDefaults()
+	login.SetChallenge("login-challenge")
+
+	mock := &hydraClientMock{
+		getLogin: func(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2LoginRequest, *http.Response, error) {
+			return login, &http.Response{StatusCode: http.StatusOK}, nil
+		},
+	}
+
+	idFetcher := identityFetcherStub{fetch: func(context.Context, string) (*IdentityProfile, error) {
+		t.Fatalf("identity fetch should not be called when hint missing")
+		return nil, nil
+	}}
+
+	svc := NewService(Options{Hydra: mock, Identity: idFetcher})
+
+	_, err := svc.ResolveLogin(context.Background(), "login-challenge")
+	require.Error(t, err)
+
+	var challengeErr Error
+	require.ErrorAs(t, err, &challengeErr)
+	require.Equal(t, http.StatusUnauthorized, challengeErr.StatusCode())
+	require.Equal(t, "session_required", challengeErr.Code())
+}
+
+func TestResolveLoginInvalidHintReturnsSessionInvalid(t *testing.T) {
+	login := hydraAdmin.NewOAuth2LoginRequestWithDefaults()
+	login.SetChallenge("login-challenge")
+
+	mock := &hydraClientMock{
+		getLogin: func(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2LoginRequest, *http.Response, error) {
+			return login, &http.Response{StatusCode: http.StatusOK}, nil
+		},
+	}
+
+	idFetcher := identityFetcherStub{fetch: func(context.Context, string) (*IdentityProfile, error) {
+		t.Fatalf("identity fetch should not be called when hint invalid")
+		return nil, nil
+	}}
+
+	svc := NewService(Options{Hydra: mock, Identity: idFetcher})
+
+	provider := IdentityHintFunc(func(ctx context.Context) (string, error) {
+		return "", ErrIdentitySessionInvalid
+	})
+
+	ctx := WithIdentityHintProvider(context.Background(), provider)
+	_, err := svc.ResolveLogin(ctx, "login-challenge")
+	require.Error(t, err)
+
+	var challengeErr Error
+	require.ErrorAs(t, err, &challengeErr)
+	require.Equal(t, http.StatusUnauthorized, challengeErr.StatusCode())
+	require.Equal(t, "session_invalid", challengeErr.Code())
+}
+
 func TestResolveLoginMissingTraitsReturnsDomainError(t *testing.T) {
 	login := hydraAdmin.NewOAuth2LoginRequestWithDefaults()
 	login.SetChallenge("login-challenge")

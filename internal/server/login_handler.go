@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -12,32 +13,58 @@ import (
 	"go.uber.org/zap"
 )
 
-// LoginHandler processes incoming login challenges and delegates to the challenge service.
-type LoginHandler struct {
-	logger   *zap.Logger
-	service  challenge.Service
-	metrics  telemetry.ChallengeRecorder
-	paramKey string
+// SessionIdentityResolver resolves a Kratos session cookie into an identity identifier.
+type SessionIdentityResolver interface {
+	IdentityID(ctx context.Context, sessionCookie string) (string, error)
 }
 
-// NewLoginHandler constructs a login handler with the provided dependencies.
-func NewLoginHandler(logger *zap.Logger, service challenge.Service, metrics telemetry.ChallengeRecorder) *LoginHandler {
+// LoginHandler processes login challenges and delegates to the challenge service.
+type LoginHandler struct {
+	logger          *zap.Logger
+	service         challenge.Service
+	metrics         telemetry.ChallengeRecorder
+	sessionResolver SessionIdentityResolver
+	paramKey        string
+	sessionCookie   string
+}
+
+// LoginHandlerConfig captures dependencies used by LoginHandler.
+type LoginHandlerConfig struct {
+	Logger          *zap.Logger
+	Challenge       challenge.Service
+	Metrics         telemetry.ChallengeRecorder
+	SessionResolver SessionIdentityResolver
+	SessionCookie   string
+}
+
+// NewLoginHandler constructs a LoginHandler from the supplied configuration.
+func NewLoginHandler(cfg LoginHandlerConfig) *LoginHandler {
+	logger := cfg.Logger
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	if service == nil {
-		service = challenge.NewStubService()
+
+	svc := cfg.Challenge
+	if svc == nil {
+		svc = challenge.NewStubService()
+	}
+
+	cookie := strings.TrimSpace(cfg.SessionCookie)
+	if cookie == "" {
+		cookie = "ory_kratos_session"
 	}
 
 	return &LoginHandler{
-		logger:   logger,
-		service:  service,
-		metrics:  metrics,
-		paramKey: "login_challenge",
+		logger:          logger,
+		service:         svc,
+		metrics:         cfg.Metrics,
+		sessionResolver: cfg.SessionResolver,
+		paramKey:        "login_challenge",
+		sessionCookie:   cookie,
 	}
 }
 
-// Handle parses the login challenge, invokes the orchestrator, and redirects on success.
+// Handle parses the login challenge, injects session hints, and redirects on success.
 func (h *LoginHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	started := time.Now()
 	challengeID := strings.TrimSpace(r.URL.Query().Get(h.paramKey))
@@ -48,12 +75,15 @@ func (h *LoginHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resolution, err := h.service.ResolveLogin(r.Context(), challengeID)
+	ctx := h.attachIdentityHint(r.Context(), r)
+
+	resolution, err := h.service.ResolveLogin(ctx, challengeID)
 	if err != nil {
 		h.observe(started, err)
 		middlewarepkg.WriteChallengeError(w, r, err)
 		return
 	}
+
 	h.observe(started, nil)
 
 	redirectTo := resolution.RedirectURL
@@ -69,6 +99,43 @@ func (h *LoginHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	)
 
 	http.Redirect(w, r, redirectTo, http.StatusFound)
+}
+
+func (h *LoginHandler) attachIdentityHint(ctx context.Context, r *http.Request) context.Context {
+	if h.sessionResolver == nil {
+		return ctx
+	}
+
+	provider := h.buildHintProvider(r)
+	if provider == nil {
+		return ctx
+	}
+
+	return challenge.WithIdentityHintProvider(ctx, provider)
+}
+
+func (h *LoginHandler) buildHintProvider(r *http.Request) challenge.IdentityHintProvider {
+	if h.sessionResolver == nil {
+		return nil
+	}
+
+	cookie, err := r.Cookie(h.sessionCookie)
+	if err != nil {
+		return challenge.IdentityHintFunc(func(context.Context) (string, error) {
+			return "", challenge.ErrIdentitySessionRequired
+		})
+	}
+
+	sessionToken := strings.TrimSpace(cookie.Value)
+	if sessionToken == "" {
+		return challenge.IdentityHintFunc(func(context.Context) (string, error) {
+			return "", challenge.ErrIdentitySessionInvalid
+		})
+	}
+
+	return challenge.IdentityHintFunc(func(ctx context.Context) (string, error) {
+		return h.sessionResolver.IdentityID(ctx, sessionToken)
+	})
 }
 
 func (h *LoginHandler) observe(started time.Time, err error) {

@@ -6,22 +6,25 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/go-chi/chi/v5"
+	chiMiddleware "github.com/go-chi/chi/v5/middleware"
+	"go.uber.org/zap"
+
 	"github.com/alkem-io/oidc-service/internal/challenge"
 	"github.com/alkem-io/oidc-service/internal/config"
 	"github.com/alkem-io/oidc-service/internal/maintenance"
 	middlewarepkg "github.com/alkem-io/oidc-service/internal/middleware"
 	"github.com/alkem-io/oidc-service/pkg/telemetry"
-	"github.com/go-chi/chi/v5"
-	chiMiddleware "github.com/go-chi/chi/v5/middleware"
-	"go.uber.org/zap"
 )
 
 // Options bundles router dependencies.
 type Options struct {
-	Logger      *zap.Logger
-	Maintenance *maintenance.State
-	Challenge   challenge.Service
-	Metrics     telemetry.MetricsProvider
+	Logger          *zap.Logger
+	Maintenance     *maintenance.State
+	Challenge       challenge.Service
+	Metrics         telemetry.MetricsProvider
+	SessionResolver SessionIdentityResolver
+	SessionCookie   string
 }
 
 // NewRouter wires core middleware and health endpoints.
@@ -43,61 +46,83 @@ func NewRouter(opts Options) http.Handler {
 	r.Use(chiMiddleware.RealIP)
 	r.Use(chiMiddleware.Recoverer)
 	r.Use(middlewarepkg.RequestContext(opts.Logger))
-	r.Use(middlewarepkg.Maintenance(middlewarepkg.MaintenanceOptions{
-		State:   opts.Maintenance,
-		Metrics: opts.Metrics,
-		Skip: func(r *http.Request) bool {
-			return r.URL.Path == "/health/live" || r.URL.Path == "/health/ready"
+	r.Use(
+		middlewarepkg.Maintenance(
+			middlewarepkg.MaintenanceOptions{
+				State:   opts.Maintenance,
+				Metrics: opts.Metrics,
+				Skip: func(r *http.Request) bool {
+					return r.URL.Path == "/health/live" || r.URL.Path == "/health/ready"
+				},
+			},
+		),
+	)
+
+	r.Get(
+		"/health/live", func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(w, http.StatusOK, map[string]any{"status": "alive"})
 		},
-	}))
+	)
 
-	r.Get("/health/live", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{"status": "alive"})
-	})
+	r.Get(
+		"/health/ready", func(w http.ResponseWriter, r *http.Request) {
+			state := opts.Maintenance.Snapshot()
+			readiness := opts.Challenge.Readiness(r.Context())
 
-	r.Get("/health/ready", func(w http.ResponseWriter, r *http.Request) {
-		state := opts.Maintenance.Snapshot()
-		readiness := opts.Challenge.Readiness(r.Context())
-
-		payload := map[string]any{
-			"status":      readiness.Status,
-			"hydra":       readiness.Hydra,
-			"kratos":      readiness.Kratos,
-			"maintenance": state.Enabled,
-		}
-		if readiness.Version != "" {
-			payload["version"] = readiness.Version
-		}
-
-		statusCode := http.StatusOK
-		if readiness.Status != "ready" {
-			statusCode = http.StatusServiceUnavailable
-			payload["status"] = readiness.Status
-		}
-		if state.Enabled {
-			statusCode = http.StatusServiceUnavailable
-			payload["status"] = "maintenance"
-			if value := retryAfterHeader(state); value != "" {
-				w.Header().Set("Retry-After", value)
+			payload := map[string]any{
+				"status":      readiness.Status,
+				"hydra":       readiness.Hydra,
+				"kratos":      readiness.Kratos,
+				"maintenance": state.Enabled,
 			}
-		}
+			if readiness.Version != "" {
+				payload["version"] = readiness.Version
+			}
 
-		writeJSON(w, statusCode, payload)
-	})
+			statusCode := http.StatusOK
+			if readiness.Status != "ready" {
+				statusCode = http.StatusServiceUnavailable
+				payload["status"] = readiness.Status
+			}
+			if state.Enabled {
+				statusCode = http.StatusServiceUnavailable
+				payload["status"] = "maintenance"
+				if value := retryAfterHeader(state); value != "" {
+					w.Header().Set("Retry-After", value)
+				}
+			}
 
-	loginHandler := NewLoginHandler(opts.Logger, opts.Challenge, opts.Metrics)
-	r.Get("/v1/oidc/login", func(w http.ResponseWriter, r *http.Request) {
-		loginHandler.Handle(w, r)
-	})
+			writeJSON(w, statusCode, payload)
+		},
+	)
+
+	loginHandler := NewLoginHandler(
+		LoginHandlerConfig{
+			Logger:          opts.Logger,
+			Challenge:       opts.Challenge,
+			Metrics:         opts.Metrics,
+			SessionResolver: opts.SessionResolver,
+			SessionCookie:   opts.SessionCookie,
+		},
+	)
+	r.Get(
+		"/v1/oidc/login", func(w http.ResponseWriter, r *http.Request) {
+			loginHandler.Handle(w, r)
+		},
+	)
 
 	consentHandler := NewConsentHandler(opts.Logger, opts.Challenge, opts.Metrics)
-	r.Get("/v1/oidc/consent", func(w http.ResponseWriter, r *http.Request) {
-		consentHandler.Handle(w, r)
-	})
+	r.Get(
+		"/v1/oidc/consent", func(w http.ResponseWriter, r *http.Request) {
+			consentHandler.Handle(w, r)
+		},
+	)
 
-	r.Get("/metrics", func(w http.ResponseWriter, r *http.Request) {
-		opts.Metrics.Handler().ServeHTTP(w, r)
-	})
+	r.Get(
+		"/metrics", func(w http.ResponseWriter, r *http.Request) {
+			opts.Metrics.Handler().ServeHTTP(w, r)
+		},
+	)
 
 	return r
 }

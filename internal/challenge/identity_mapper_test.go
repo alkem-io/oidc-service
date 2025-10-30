@@ -53,6 +53,24 @@ func TestIdentityMapperMissingTraits(t *testing.T) {
 	require.ElementsMatch(t, []string{"traits.email"}, missingErr.Traits)
 }
 
+func TestIdentityMapperDisplayNameFallbackFromName(t *testing.T) {
+	identity := kratosclient.NewIdentity("identity-id", "default", "https://example.com/schema", map[string]any{
+		"email": "user@example.com",
+		"name": map[string]any{
+			"first": "Example",
+			"last":  "User",
+		},
+	})
+
+	mapper := NewIdentityMapperWithProvider(func(context.Context, string) (*kratosclient.Identity, *http.Response, error) {
+		return identity, &http.Response{StatusCode: http.StatusOK}, nil
+	})
+
+	profile, err := mapper.Fetch(context.Background(), "identity-id")
+	require.NoError(t, err)
+	require.Equal(t, "Example User", profile.DisplayName)
+}
+
 func TestIdentityMapperInvalidEmail(t *testing.T) {
 	identity := kratosclient.NewIdentity("identity-id", "default", "https://example.com/schema", map[string]any{
 		"email":        "not-an-email",

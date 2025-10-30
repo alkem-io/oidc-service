@@ -144,7 +144,20 @@ func (s *service) ResolveLogin(ctx context.Context, challengeID string) (*Resolu
 
 	identityID := strings.TrimSpace(req.GetSubject())
 	if identityID == "" {
-		return nil, NewHydraFailureError(challengeID, "hydra login request missing subject for identity lookup")
+		provider := IdentityHintProviderFromContext(ctx)
+		if provider == nil {
+			return nil, NewSessionRequiredError(challengeID)
+		}
+
+		hintID, err := provider.IdentityHint(ctx)
+		if err != nil {
+			return nil, mapIdentityHintError(challengeID, err)
+		}
+
+		identityID = strings.TrimSpace(hintID)
+		if identityID == "" {
+			return nil, NewSessionInvalidError(challengeID)
+		}
 	}
 
 	profile, err := s.identity.Fetch(ctx, identityID)
@@ -337,6 +350,19 @@ func mapIdentityError(challengeID string, err error) error {
 	default:
 		return NewKratosFailureError(challengeID, err.Error())
 	}
+}
+
+func mapIdentityHintError(challengeID string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, ErrIdentitySessionRequired) {
+		return NewSessionRequiredError(challengeID)
+	}
+	if errors.Is(err, ErrIdentitySessionInvalid) {
+		return NewSessionInvalidError(challengeID)
+	}
+	return NewKratosFailureError(challengeID, err.Error())
 }
 
 const identityContextKey = "identity_id"

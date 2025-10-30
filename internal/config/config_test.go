@@ -13,6 +13,7 @@ func TestLoadSuccess(t *testing.T) {
 		"OIDC_HYDRA_ADMIN_URL":      "https://hydra-admin.local",
 		"OIDC_HYDRA_PUBLIC_URL":     "https://hydra.local",
 		"OIDC_KRATOS_ADMIN_URL":     "https://kratos-admin.local",
+		"OIDC_KRATOS_PUBLIC_URL":    "https://kratos-public.local",
 		"OIDC_SYNAPSE_CALLBACK_URL": "https://synapse.local/callback",
 		"OIDC_COOKIE_DOMAIN":        "local.alkem.io",
 		"OIDC_MAINTENANCE_MODE":     "true",
@@ -26,6 +27,7 @@ func TestLoadSuccess(t *testing.T) {
 
 	require.Equal(t, "https://hydra-admin.local", cfg.HydraAdminURL)
 	require.Equal(t, "https://hydra.local", cfg.HydraPublicURL)
+	require.Equal(t, "https://kratos-public.local", cfg.KratosPublicURL)
 	require.Equal(t, time.Duration(5)*time.Second, cfg.ReadinessTimeout)
 
 	state := cfg.Maintenance()
@@ -36,8 +38,9 @@ func TestLoadSuccess(t *testing.T) {
 
 func TestLoadMissingValue(t *testing.T) {
 	setEnv(t, map[string]string{
-		"OIDC_HYDRA_ADMIN_URL":  "https://hydra-admin.local",
-		"OIDC_HYDRA_PUBLIC_URL": "https://hydra.local",
+		"OIDC_HYDRA_ADMIN_URL":   "https://hydra-admin.local",
+		"OIDC_HYDRA_PUBLIC_URL":  "https://hydra.local",
+		"OIDC_KRATOS_PUBLIC_URL": "https://kratos-public.local",
 	})
 
 	cfg, err := Load()
@@ -50,6 +53,7 @@ func TestLoadRejectsNonHTTPS(t *testing.T) {
 		"OIDC_HYDRA_ADMIN_URL":      "http://hydra-admin.local",
 		"OIDC_HYDRA_PUBLIC_URL":     "https://hydra.local",
 		"OIDC_KRATOS_ADMIN_URL":     "https://kratos-admin.local",
+		"OIDC_KRATOS_PUBLIC_URL":    "https://kratos-public.local",
 		"OIDC_SYNAPSE_CALLBACK_URL": "https://synapse.local/callback",
 		"OIDC_COOKIE_DOMAIN":        "local.alkem.io",
 	})
@@ -63,6 +67,7 @@ func TestLoadAllowsHTTPWhenInsecureEnabled(t *testing.T) {
 		"OIDC_HYDRA_ADMIN_URL":      "http://hydra-admin.local",
 		"OIDC_HYDRA_PUBLIC_URL":     "https://hydra.local",
 		"OIDC_KRATOS_ADMIN_URL":     "http://kratos-admin.local",
+		"OIDC_KRATOS_PUBLIC_URL":    "http://kratos-public.local",
 		"OIDC_SYNAPSE_CALLBACK_URL": "https://synapse.local/callback",
 		"OIDC_COOKIE_DOMAIN":        "local.alkem.io",
 		"OIDC_ALLOW_INSECURE_HTTP":  "true",
@@ -79,6 +84,7 @@ func TestMaintenanceDisabled(t *testing.T) {
 		"OIDC_HYDRA_ADMIN_URL":      "https://hydra-admin.local",
 		"OIDC_HYDRA_PUBLIC_URL":     "https://hydra.local",
 		"OIDC_KRATOS_ADMIN_URL":     "https://kratos-admin.local",
+		"OIDC_KRATOS_PUBLIC_URL":    "https://kratos-public.local",
 		"OIDC_SYNAPSE_CALLBACK_URL": "https://synapse.local/callback",
 		"OIDC_COOKIE_DOMAIN":        "local.alkem.io",
 		"OIDC_MAINTENANCE_MODE":     "false",
@@ -98,6 +104,7 @@ func setEnv(t *testing.T, values map[string]string) {
 		"OIDC_HYDRA_ADMIN_URL",
 		"OIDC_HYDRA_PUBLIC_URL",
 		"OIDC_KRATOS_ADMIN_URL",
+		"OIDC_KRATOS_PUBLIC_URL",
 		"OIDC_SYNAPSE_CALLBACK_URL",
 		"OIDC_ADMIN_TOKEN",
 		"OIDC_COOKIE_DOMAIN",

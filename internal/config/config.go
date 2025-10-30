@@ -15,6 +15,7 @@ type ServiceConfig struct {
 	HydraAdminURL      string        `envconfig:"HYDRA_ADMIN_URL" required:"true"`
 	HydraPublicURL     string        `envconfig:"HYDRA_PUBLIC_URL" required:"true"`
 	KratosAdminURL     string        `envconfig:"KRATOS_ADMIN_URL" required:"true"`
+	KratosPublicURL    string        `envconfig:"KRATOS_PUBLIC_URL" required:"true"`
 	SynapseCallbackURL string        `envconfig:"SYNAPSE_CALLBACK_URL" required:"true"`
 	AuthToken          string        `envconfig:"ADMIN_TOKEN"`
 	CookieDomain       string        `envconfig:"COOKIE_DOMAIN" required:"true"`
@@ -64,6 +65,9 @@ func (cfg *ServiceConfig) validate() error {
 		return err
 	}
 	if err := cfg.requireSecureURL(cfg.KratosAdminURL, "OIDC_KRATOS_ADMIN_URL"); err != nil {
+		return err
+	}
+	if err := cfg.requireSecureURL(cfg.KratosPublicURL, "OIDC_KRATOS_PUBLIC_URL"); err != nil {
 		return err
 	}
 	if err := assertNotEmpty(cfg.SynapseCallbackURL, "OIDC_SYNAPSE_CALLBACK_URL"); err != nil {

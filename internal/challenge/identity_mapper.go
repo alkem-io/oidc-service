@@ -112,7 +112,7 @@ func buildIdentityProfile(identity *kratosclient.Identity) (*IdentityProfile, er
 		missing = append(missing, "traits.email")
 	}
 
-	displayName := extractString(traits["display_name"])
+	displayName := deriveDisplayName(traits)
 	if displayName == "" {
 		missing = append(missing, "traits.display_name")
 	}
@@ -152,6 +152,35 @@ func extractString(value interface{}) string {
 	default:
 		return ""
 	}
+}
+
+func deriveDisplayName(traits map[string]interface{}) string {
+	if traits == nil {
+		return ""
+	}
+
+	if value := extractString(traits["display_name"]); value != "" {
+		return value
+	}
+
+	if nameValue, ok := traits["name"]; ok {
+		switch name := nameValue.(type) {
+		case map[string]any:
+			first := extractString(name["first"])
+			last := extractString(name["last"])
+			if combined := strings.TrimSpace(strings.TrimSpace(first + " " + last)); combined != "" {
+				return combined
+			}
+			if first != "" {
+				return first
+			}
+			if last != "" {
+				return last
+			}
+		}
+	}
+
+	return ""
 }
 
 func isValidEmail(value string) bool {

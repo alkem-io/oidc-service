@@ -12,6 +12,8 @@ import (
 
 	"github.com/alkem-io/oidc-service/internal/challenge"
 	"github.com/alkem-io/oidc-service/internal/config"
+	"github.com/alkem-io/oidc-service/internal/hydra"
+	"github.com/alkem-io/oidc-service/internal/kratos"
 	"github.com/alkem-io/oidc-service/internal/maintenance"
 	"github.com/alkem-io/oidc-service/internal/server"
 	"github.com/alkem-io/oidc-service/pkg/telemetry"
@@ -39,12 +41,57 @@ func main() {
 
 	maint := maintenance.NewState(cfg.Maintenance())
 
-	challengeService := challenge.NewStubService()
+	metrics := telemetry.NewMetrics(telemetry.NewRegistry())
+
+	hydraClient, err := hydra.NewClient(hydra.Config{
+		AdminURL:  cfg.HydraAdminURL,
+		AuthToken: cfg.AuthToken,
+	})
+	if err != nil {
+		fatal("configure hydra client", err)
+	}
+
+	kratosClient, err := kratos.NewClient(kratos.Config{
+		AdminURL:  cfg.KratosAdminURL,
+		AuthToken: cfg.AuthToken,
+	})
+	if err != nil {
+		fatal("configure kratos client", err)
+	}
+
+	sessionResolver, err := kratos.NewSessionResolver(kratos.SessionConfig{
+		PublicURL: cfg.KratosPublicURL,
+		Timeout:   cfg.ReadinessTimeout,
+	})
+	if err != nil {
+		fatal("configure kratos session resolver", err)
+	}
+
+	hydraProbe, err := challenge.NewHTTPReadinessProbe(cfg.HydraAdminURL, "/health/ready", "/version", cfg.AuthToken, cfg.ReadinessTimeout)
+	if err != nil {
+		fatal("configure hydra readiness probe", err)
+	}
+
+	kratosProbe, err := challenge.NewHTTPReadinessProbe(cfg.KratosAdminURL, "/admin/health/ready", "/version", cfg.AuthToken, cfg.ReadinessTimeout)
+	if err != nil {
+		fatal("configure kratos readiness probe", err)
+	}
+
+	challengeService := challenge.NewService(challenge.Options{
+		Hydra:            challenge.NewHydraOAuth2Client(hydraClient.Admin().OAuth2API),
+		Identity:         challenge.NewIdentityMapper(kratosClient.Admin().IdentityAPI),
+		HydraProbe:       hydraProbe,
+		KratosProbe:      kratosProbe,
+		ReadinessTimeout: cfg.ReadinessTimeout,
+	})
 
 	handler := server.NewRouter(server.Options{
-		Logger:      logger,
-		Maintenance: maint,
-		Challenge:   challengeService,
+		Logger:          logger,
+		Maintenance:     maint,
+		Challenge:       challengeService,
+		Metrics:         metrics,
+		SessionResolver: sessionResolver,
+		SessionCookie:   "ory_kratos_session",
 	})
 
 	srv := &http.Server{

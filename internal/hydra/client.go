@@ -24,7 +24,11 @@ type Client struct {
 	api *hydraAdmin.APIClient
 }
 
-// NewClient constructs an Admin API client with deterministic configuration.
+// NewClient constructs an Admin API client configured for the Hydra Admin API.
+// It validates that cfg.AdminURL is non-empty and includes a scheme and host, and
+// returns an error if those checks fail. NewClient trims any trailing slash from
+// the server URL, uses cfg.Timeout or a 10s default when timeout is not positive,
+// and attaches an Authorization: Bearer <token> header when cfg.AuthToken is set.
 func NewClient(cfg Config) (*Client, error) {
 	if strings.TrimSpace(cfg.AdminURL) == "" {
 		return nil, fmt.Errorf("hydra admin url is required")

@@ -18,7 +18,9 @@ func (f identityHintFunc) IdentityHint(ctx context.Context) (string, error) {
 	return f(ctx)
 }
 
-// IdentityHintFunc wraps a function to satisfy IdentityHintProvider.
+// IdentityHintFunc returns an IdentityHintProvider that calls the given function.
+// If fn is nil, IdentityHintFunc returns nil; otherwise the returned provider
+// delegates IdentityHint calls to fn.
 func IdentityHintFunc(fn func(context.Context) (string, error)) IdentityHintProvider {
 	if fn == nil {
 		return nil
@@ -26,7 +28,8 @@ func IdentityHintFunc(fn func(context.Context) (string, error)) IdentityHintProv
 	return identityHintFunc(fn)
 }
 
-// WithIdentityHintProvider attaches an identity hint provider to the context for downstream resolution.
+// WithIdentityHintProvider returns a copy of ctx that carries the provided IdentityHintProvider.
+// If ctx is nil, context.Background() is used. If provider is nil, the original (or defaulted) context is returned unchanged.
 func WithIdentityHintProvider(ctx context.Context, provider IdentityHintProvider) context.Context {
 	if ctx == nil {
 		ctx = context.Background()
@@ -37,7 +40,8 @@ func WithIdentityHintProvider(ctx context.Context, provider IdentityHintProvider
 	return context.WithValue(ctx, identityHintContextKey{}, provider)
 }
 
-// IdentityHintProviderFromContext extracts the hint provider from context when available.
+// IdentityHintProviderFromContext extracts the IdentityHintProvider stored in the context, if present.
+// If ctx is nil or no provider is associated with the context, it returns nil.
 func IdentityHintProviderFromContext(ctx context.Context) IdentityHintProvider {
 	if ctx == nil {
 		return nil

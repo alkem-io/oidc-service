@@ -73,7 +73,7 @@ type ChallengeError struct {
 	timestamp     time.Time
 }
 
-// NewError constructs a ChallengeError instance with the supplied metadata.
+// timestamp in UTC.
 func NewError(status int, code, message, challengeID string, missing []string) *ChallengeError {
 	return &ChallengeError{
 		status:        status,
@@ -109,11 +109,14 @@ func (e *ChallengeError) Timestamp() time.Time {
 	return e.timestamp
 }
 
-// Helper constructors for common failure modes.
+// NewMissingTraitsError creates a ChallengeError indicating the identity is missing required traits.
+// The produced error has HTTP status 400, code "missing_traits", and includes the provided challenge ID and missing trait names.
 func NewMissingTraitsError(challengeID string, traits []string) *ChallengeError {
 	return NewError(http.StatusBadRequest, "missing_traits", "identity is missing required traits", challengeID, traits)
 }
 
+// NewHydraFailureError creates a ChallengeError representing an internal Hydra resolution failure.
+// If message is empty, the error message defaults to "failed to resolve hydra challenge".
 func NewHydraFailureError(challengeID, message string) *ChallengeError {
 	if message == "" {
 		message = "failed to resolve hydra challenge"
@@ -121,10 +124,14 @@ func NewHydraFailureError(challengeID, message string) *ChallengeError {
 	return NewError(http.StatusInternalServerError, "hydra_failure", message, challengeID, nil)
 }
 
+// NewInvalidChallengeError returns a ChallengeError indicating the requested challenge was not found.
+// The error has HTTP status 404 and domain code "invalid_challenge".
 func NewInvalidChallengeError(challengeID string) *ChallengeError {
 	return NewError(http.StatusNotFound, "invalid_challenge", "challenge not found", challengeID, nil)
 }
 
+// NewMaintenanceError creates a ChallengeError representing that the service is in maintenance mode.
+// If message is empty, the default message "service is in maintenance mode" is used.
 func NewMaintenanceError(message string) *ChallengeError {
 	if message == "" {
 		message = "service is in maintenance mode"
@@ -132,6 +139,9 @@ func NewMaintenanceError(message string) *ChallengeError {
 	return NewError(http.StatusServiceUnavailable, "maintenance_mode", message, "", nil)
 }
 
+// NewKratosFailureError creates a ChallengeError for a Kratos (identity) resolution failure for the given challenge ID.
+// If message is empty, the error message defaults to "failed to resolve identity traits".
+// The returned error has HTTP status 500 and code "kratos_failure".
 func NewKratosFailureError(challengeID, message string) *ChallengeError {
 	if message == "" {
 		message = "failed to resolve identity traits"

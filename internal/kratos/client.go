@@ -24,7 +24,9 @@ type Client struct {
 	api *kratosClient.APIClient
 }
 
-// NewClient instantiates a Kratos Admin API client with optional bearer authentication.
+// NewClient creates a Client configured to communicate with the Kratos Admin API at the address in cfg.AdminURL.
+// It returns an error if cfg.AdminURL is empty, cannot be parsed, or does not include a scheme and host.
+// The resulting client uses cfg.Timeout when greater than zero (otherwise a default timeout) and, if cfg.AuthToken is provided, sets a default "Authorization: Bearer <token>" header.
 func NewClient(cfg Config) (*Client, error) {
 	if strings.TrimSpace(cfg.AdminURL) == "" {
 		return nil, fmt.Errorf("kratos admin url is required")

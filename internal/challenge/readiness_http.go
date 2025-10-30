@@ -17,7 +17,10 @@ type httpReadinessProbe struct {
 	token      string
 }
 
-// NewHTTPReadinessProbe constructs a readiness probe backed by simple HTTP checks.
+// NewHTTPReadinessProbe constructs an HTTP-based ReadinessProbe using baseURL as the base for readyPath and versionPath.
+// It resolves readyPath and versionPath against baseURL, trims the provided token for use as an optional Bearer token,
+// and configures an http.Client with the provided timeout (defaults to 5s when timeout is <= 0).
+// Returns an error if baseURL is empty or if parsing/resolving any URL fails.
 func NewHTTPReadinessProbe(baseURL, readyPath, versionPath, token string, timeout time.Duration) (ReadinessProbe, error) {
 	baseURL = strings.TrimSpace(baseURL)
 	if baseURL == "" {
@@ -109,6 +112,9 @@ func (p *httpReadinessProbe) Version(ctx context.Context) (string, error) {
 	return strings.TrimSpace(payload.Version), nil
 }
 
+// resolveURL resolves the provided path against base and returns the resulting absolute URL string.
+// If path is empty after trimming whitespace, it returns an empty string and no error.
+// If the path cannot be parsed as a URL reference, it returns an error.
 func resolveURL(base *url.URL, path string) (string, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {

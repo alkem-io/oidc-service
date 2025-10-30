@@ -67,7 +67,7 @@ if [ -z "$FEATURE_DESCRIPTION" ]; then
     exit 1
 fi
 
-# Function to find the repository root by searching for existing project markers
+# find_repo_root finds the nearest ancestor of the provided directory that contains a .git or .specify directory, echoes that directory path on success, and returns 1 if no repository root is found.
 find_repo_root() {
     local dir="$1"
     while [ "$dir" != "/" ]; do
@@ -80,7 +80,7 @@ find_repo_root() {
     return 1
 }
 
-# Function to check existing branches (local and remote) and return next available number
+# check_existing_branches checks local branches, remote heads (origin), and SPECS_DIR directories for names matching a numeric-prefix followed by the given short name and echoes the next available numeric prefix (highest found plus 1).
 check_existing_branches() {
     local short_name="$1"
     
@@ -133,7 +133,7 @@ cd "$REPO_ROOT"
 SPECS_DIR="$REPO_ROOT/specs"
 mkdir -p "$SPECS_DIR"
 
-# Function to generate branch name with stop word filtering and length filtering
+# generate_branch_name generates a short, dash-separated branch suffix from a free-form description by filtering out common stop words and very short words (while preserving uppercase acronyms), then joining up to three (four when exactly four meaningful words are found) meaningful words; if no meaningful words remain, it falls back to a sanitized slug of the original description.
 generate_branch_name() {
     local description="$1"
     

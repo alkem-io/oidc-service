@@ -13,7 +13,8 @@ type hydraOAuth2Client struct {
 	api hydraAdmin.OAuth2API
 }
 
-// NewHydraOAuth2Client wraps the provided Hydra OAuth2 API implementation.
+// NewHydraOAuth2Client creates a HydraClient that adapts the provided hydraAdmin.OAuth2API.
+// It panics if api is nil.
 func NewHydraOAuth2Client(api hydraAdmin.OAuth2API) HydraClient {
 	if api == nil {
 		panic("hydra oauth2 api is required")

@@ -25,6 +25,7 @@ const (
 	shutdownGracePeriod = 15 * time.Second
 )
 
+// main is the program entry point that initializes configuration, logging, clients and services (Hydra, Kratos, readiness probes, challenge service), constructs the HTTP router and server, starts the OIDC service, and performs a graceful shutdown on SIGINT/SIGTERM.
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -127,6 +128,8 @@ func main() {
 	}
 }
 
+// fatal logs the provided message and error at fatal level and terminates the process.
+// The message and error are formatted as "<msg>: <err>".
 func fatal(msg string, err error) {
 	log.Fatalf("%s: %v", msg, err)
 }

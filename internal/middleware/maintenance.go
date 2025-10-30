@@ -23,7 +23,9 @@ type MaintenanceOptions struct {
 	Metrics telemetry.ChallengeRecorder
 }
 
-// Maintenance short-circuits requests with a 503 response when maintenance mode is enabled.
+// Maintenance returns an HTTP middleware that short-circuits requests and writes a maintenance challenge response when maintenance mode is enabled.
+// If the maintenance state provides a retry interval the middleware sets the `Retry-After` header; if a Metrics recorder is provided it records maintenance challenge timing for recognized flows (login, consent).
+// The middleware respects the provided Skip function to bypass maintenance checks for specific requests.
 func Maintenance(opts MaintenanceOptions) func(http.Handler) http.Handler {
 	state := opts.State
 	if state == nil {
@@ -64,6 +66,8 @@ func Maintenance(opts MaintenanceOptions) func(http.Handler) http.Handler {
 	}
 }
 
+// flowFromPath maps an HTTP request path to a maintenance flow name.
+// It returns "login" for paths starting with "/v1/oidc/login", "consent" for paths starting with "/v1/oidc/consent", and the empty string otherwise.
 func flowFromPath(path string) string {
 	if strings.HasPrefix(path, "/v1/oidc/login") {
 		return "login"
@@ -80,6 +84,10 @@ func SkipAll(*http.Request) bool { return true }
 // SkipNone always returns false and forces maintenance checks.
 func SkipNone(*http.Request) bool { return false }
 
+// retryAfter converts the state's RetryAfter duration into a string suitable for an HTTP
+// Retry-After header. If state.RetryAfter is nil it returns an empty string. The duration
+// is rounded up to the next whole second; if the resulting seconds value is less than or
+// equal to zero it returns "0", otherwise it returns the decimal seconds as a string.
 func retryAfter(state config.MaintenanceState) string {
 	if state.RetryAfter == nil {
 		return ""

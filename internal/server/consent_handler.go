@@ -19,7 +19,8 @@ type ConsentHandler struct {
 	paramKey string
 }
 
-// NewConsentHandler constructs a consent handler with the provided dependencies.
+// NewConsentHandler creates a ConsentHandler configured with the provided dependencies.
+// If logger is nil a no-op logger is used, if service is nil a stub service is used; the returned handler uses "consent_challenge" as the query parameter key and accepts a nil metrics recorder.
 func NewConsentHandler(logger *zap.Logger, service challenge.Service, metrics telemetry.ChallengeRecorder) *ConsentHandler {
 	if logger == nil {
 		logger = zap.NewNop()

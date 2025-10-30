@@ -14,7 +14,8 @@ type State struct {
 	retryAfter atomic.Value
 }
 
-// NewState constructs a State instance from the current configuration snapshot.
+// NewState constructs a State initialized from the provided configuration snapshot.
+// The returned State is ready for concurrent use and reflects the supplied maintenance settings.
 func NewState(initial config.MaintenanceState) *State {
 	s := &State{}
 	s.Update(initial)
@@ -48,6 +49,8 @@ func (s *State) Snapshot() config.MaintenanceState {
 	return value
 }
 
+// copyDuration returns a pointer to a newly allocated time.Duration containing the same value as src.
+// If src is nil, it returns nil.
 func copyDuration(src *time.Duration) *time.Duration {
 	if src == nil {
 		return nil

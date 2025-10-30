@@ -19,7 +19,8 @@ type IdentityMapper struct {
 	fetch IdentityProviderFunc
 }
 
-// NewIdentityMapper constructs an IdentityMapper backed by the given Kratos API implementation.
+// NewIdentityMapper constructs an IdentityMapper that uses the provided Kratos IdentityAPI to fetch identities.
+// The mapper's provider returns the Kratos identity, the raw HTTP response, and any error so callers can inspect HTTP status and error details.
 func NewIdentityMapper(api kratosclient.IdentityAPI) *IdentityMapper {
 	return &IdentityMapper{
 		fetch: func(ctx context.Context, identityID string) (*kratosclient.Identity, *http.Response, error) {
@@ -29,7 +30,8 @@ func NewIdentityMapper(api kratosclient.IdentityAPI) *IdentityMapper {
 	}
 }
 
-// NewIdentityMapperWithProvider builds an IdentityMapper using the supplied provider function.
+// NewIdentityMapperWithProvider creates an IdentityMapper that uses the supplied IdentityProviderFunc.
+// It panics if the provided function is nil.
 func NewIdentityMapperWithProvider(provider IdentityProviderFunc) *IdentityMapper {
 	if provider == nil {
 		panic("identity provider func is required")
@@ -95,6 +97,13 @@ func (m *IdentityMapper) Fetch(ctx context.Context, identityID string) (*Identit
 	return profile, nil
 }
 
+// buildIdentityProfile converts a Kratos identity into an IdentityProfile and enforces required traits.
+// It returns the constructed profile when the identity contains valid traits; otherwise it returns a descriptive error.
+// If the input identity is nil, an IdentityLookupError is returned. If the identity's traits are not a map or
+// required trait keys are missing or invalid (specifically `traits.email` and `traits.display_name`), a
+// MissingTraitsError listing the missing keys is returned. The produced IdentityProfile contains ID, Email,
+// DisplayName and a shallow clone of the traits. If public metadata contains a non-empty `matrix_user_id` value,
+// it is copied into the profile's MatrixUserID field.
 func buildIdentityProfile(identity *kratosclient.Identity) (*IdentityProfile, error) {
 	if identity == nil {
 		return nil, &IdentityLookupError{Err: errors.New("identity payload was empty")}
@@ -139,10 +148,12 @@ func buildIdentityProfile(identity *kratosclient.Identity) (*IdentityProfile, er
 	return profile, nil
 }
 
+// requiredTraitKeys returns the trait keys required for constructing a valid IdentityProfile.
 func requiredTraitKeys() []string {
 	return []string{"traits.email", "traits.display_name"}
 }
 
+// extractString returns the trimmed string representation of value when it is a string or implements fmt.Stringer; otherwise it returns an empty string.
 func extractString(value interface{}) string {
 	switch v := value.(type) {
 	case string:
@@ -154,6 +165,10 @@ func extractString(value interface{}) string {
 	}
 }
 
+// deriveDisplayName extracts a human-readable display name from the provided traits map.
+// It prefers the "display_name" trait, falls back to combining "name.first" and "name.last"
+// when available, then to either "name.first" or "name.last" individually, and returns an
+// empty string if no suitable name is found.
 func deriveDisplayName(traits map[string]interface{}) string {
 	if traits == nil {
 		return ""
@@ -183,6 +198,8 @@ func deriveDisplayName(traits map[string]interface{}) string {
 	return ""
 }
 
+// isValidEmail reports whether value is a syntactically valid email address.
+// It returns true if value is non-empty and parses successfully using net/mail.ParseAddress, false otherwise.
 func isValidEmail(value string) bool {
 	if value == "" {
 		return false
@@ -193,6 +210,7 @@ func isValidEmail(value string) bool {
 	return true
 }
 
+// cloneMap returns a shallow copy of src. If src is nil, cloneMap returns nil.
 func cloneMap(src map[string]interface{}) map[string]any {
 	if src == nil {
 		return nil
@@ -204,6 +222,9 @@ func cloneMap(src map[string]interface{}) map[string]any {
 	return clone
 }
 
+// dedupe removes duplicate strings from the input slice while preserving the order
+// of their first occurrences and returns a slice containing the unique values.
+// If the input has length 0 or 1 the original slice is returned unchanged.
 func dedupe(values []string) []string {
 	if len(values) <= 1 {
 		return values

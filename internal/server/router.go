@@ -27,7 +27,18 @@ type Options struct {
 	SessionCookie   string
 }
 
-// NewRouter wires core middleware and health endpoints.
+// NewRouter constructs and returns an HTTP router configured with common middleware,
+// maintenance handling, health endpoints, OIDC login/consent routes, and a metrics endpoint.
+// 
+// The router applies RealIP, recover, request-context, and maintenance middleware. If any
+// of the Options dependencies (Logger, Maintenance, Challenge, Metrics) are nil, sensible
+// defaults are used. It exposes:
+//   - GET /health/live: returns a simple alive status.
+//   - GET /health/ready: returns readiness that combines maintenance state and the
+//     Challenge service readiness, and sets HTTP status and Retry-After when appropriate.
+//   - GET /v1/oidc/login: delegates to the configured login handler.
+//   - GET /v1/oidc/consent: delegates to the configured consent handler.
+//   - GET /metrics: serves metrics from the configured metrics provider.
 func NewRouter(opts Options) http.Handler {
 	if opts.Logger == nil {
 		opts.Logger = zap.NewNop()
@@ -127,12 +138,17 @@ func NewRouter(opts Options) http.Handler {
 	return r
 }
 
+// writeJSON writes the given payload as JSON to w and sets the provided HTTP status code.
+// It sets Content-Type to "application/json" and encodes the payload; any encoding error is ignored.
 func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(payload)
 }
 
+// retryAfterHeader returns the string value to use for an HTTP Retry-After header based on
+// state.RetryAfter. It returns an empty string if RetryAfter is nil, "0" if the rounded-up
+// seconds are less than or equal to zero, or the number of seconds (rounded up) as a decimal string.
 func retryAfterHeader(state config.MaintenanceState) string {
 	if state.RetryAfter == nil {
 		return ""

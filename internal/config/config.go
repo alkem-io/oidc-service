@@ -43,7 +43,9 @@ var (
 
 const defaultKratosSessionCookie = "ory_kratos_session"
 
-// Load reads service configuration using the OIDC prefix (OIDC_* env vars).
+// Load reads service configuration from environment variables prefixed with "OIDC".
+// It applies a default Kratos session cookie when none is provided and validates
+// the resulting configuration, returning an error if validation fails.
 func Load() (*ServiceConfig, error) {
 	cfg := &ServiceConfig{}
 	if err := envconfig.Process("OIDC", cfg); err != nil {
@@ -94,6 +96,9 @@ func (cfg *ServiceConfig) requireSecureURL(raw, key string) error {
 	return assertHTTPS(raw, key)
 }
 
+// assertHTTPOrHTTPS verifies that raw is a non-empty, parseable URL that uses
+// the "http" or "https" scheme and includes a host. It returns an error
+// describing the first validation failure.
 func assertHTTPOrHTTPS(raw, key string) error {
 	if err := assertNotEmpty(raw, key); err != nil {
 		return err
@@ -115,6 +120,8 @@ func assertHTTPOrHTTPS(raw, key string) error {
 	return nil
 }
 
+// assertHTTPS verifies that the provided raw URL is non-empty, parses as a valid URL, and uses the HTTPS scheme.
+// It returns an error if the value is empty, cannot be parsed as a URL, or does not use the "https" scheme.
 func assertHTTPS(raw, key string) error {
 	if err := assertNotEmpty(raw, key); err != nil {
 		return err
@@ -132,6 +139,8 @@ func assertHTTPS(raw, key string) error {
 	return nil
 }
 
+// assertNotEmpty reports an error if value is empty or contains only whitespace.
+// The returned error is formatted as "<key> is required"; returns nil if value is non-empty.
 func assertNotEmpty(value, key string) error {
 	if strings.TrimSpace(value) == "" {
 		return fmt.Errorf("%s is required", key)

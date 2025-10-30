@@ -26,7 +26,10 @@ type Metrics struct {
 	challengeTotal   *prometheus.CounterVec
 }
 
-// NewMetrics constructs a metrics provider backed by the supplied registry.
+// NewMetrics constructs a Metrics instance backed by the provided Prometheus registry and registers
+// challenge-related metrics on that registry. If reg is nil a new prometheus.Registry is created.
+// It registers a histogram (labels: "flow", "outcome"; namespace: "oidc", subsystem: "challenge", name: "latency_seconds")
+// and a counter (labels: "flow", "outcome", "error_code"; namespace: "oidc", subsystem: "challenge", name: "total").
 func NewMetrics(reg *prometheus.Registry) *Metrics {
 	if reg == nil {
 		reg = prometheus.NewRegistry()

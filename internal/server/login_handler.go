@@ -37,7 +37,9 @@ type LoginHandlerConfig struct {
 	SessionCookie   string
 }
 
-// NewLoginHandler constructs a LoginHandler from the supplied configuration.
+// NewLoginHandler creates a LoginHandler configured with the provided LoginHandlerConfig.
+// If Logger is nil a no-op logger is used, if Challenge is nil a stub challenge service is used,
+// and if SessionCookie is empty it defaults to "ory_kratos_session".
 func NewLoginHandler(cfg LoginHandlerConfig) *LoginHandler {
 	logger := cfg.Logger
 	if logger == nil {
@@ -152,6 +154,8 @@ func (h *LoginHandler) observe(started time.Time, err error) {
 	h.metrics.ObserveChallenge("login", outcome, errorCode, time.Since(started))
 }
 
+// classifyOutcome determines the outcome category and the associated error code for a challenge-related error.
+// It returns the outcome ("maintenance", "client_error", or "server_error") and the challenge error code; for non-challenge errors it returns "server_error" and "unexpected_error".
 func classifyOutcome(err error) (string, string) {
 	var chErr challenge.Error
 	if errors.As(err, &chErr) {

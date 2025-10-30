@@ -5,7 +5,12 @@ import (
 	"strings"
 )
 
-// redactRedirectURL strips query parameters and fragments before logging redirects.
+// redactRedirectURL produces a sanitized representation of a redirect URL suitable for logging.
+// It trims surrounding whitespace and returns an empty string for empty input.
+// On parse failure it returns "redacted".
+// The returned value has user info, query parameters, and fragment removed.
+// If the URL has no scheme and no host, it returns the path if present, otherwise "redacted".
+// Otherwise it returns the scheme (followed by "://" when a host is present), the host, and the path.
 func redactRedirectURL(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {

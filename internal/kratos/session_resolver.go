@@ -32,7 +32,9 @@ type SessionResolver struct {
 	cookieName string
 }
 
-// NewSessionResolver constructs a session resolver targeting Kratos public endpoints.
+// NewSessionResolver constructs a SessionResolver that resolves Kratos sessions by calling the public /sessions/whoami endpoint.
+// The cfg.PublicURL must be a non-empty URL including scheme and host. If cfg.Timeout is zero or negative, a 5s default timeout is used. If cfg.CookieName is empty, the default cookie name "ory_kratos_session" is used.
+// Returns an error if cfg.PublicURL is empty, cannot be parsed, or does not include a scheme and host.
 func NewSessionResolver(cfg SessionConfig) (*SessionResolver, error) {
 	trimmed := strings.TrimSpace(cfg.PublicURL)
 	if trimmed == "" {

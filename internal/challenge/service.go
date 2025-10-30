@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	hydraAdmin "github.com/ory/hydra-client-go/v2"
 )
 
@@ -20,9 +21,13 @@ const (
 // HydraClient captures the Hydra Admin interactions required to resolve challenges.
 type HydraClient interface {
 	GetLoginRequest(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2LoginRequest, *http.Response, error)
-	AcceptLoginRequest(ctx context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2LoginRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error)
+	AcceptLoginRequest(
+		ctx context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2LoginRequest,
+	) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error)
 	GetConsentRequest(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error)
-	AcceptConsentRequest(ctx context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error)
+	AcceptConsentRequest(
+		ctx context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2ConsentRequest,
+	) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error)
 }
 
 // IdentityFetcher retrieves identity profiles given a Kratos identifier.
@@ -125,14 +130,49 @@ func (s *service) ResolveLogin(ctx context.Context, challengeID string) (*Resolu
 	}
 
 	if req.GetSkip() {
+		contextData := readLoginContext(req)
 		subject := strings.TrimSpace(req.GetSubject())
+
+		if ctxID := readIdentityID(contextData); ctxID != "" {
+			subject = ctxID
+		}
+
 		if subject == "" {
 			return nil, NewHydraFailureError(challengeID, "hydra login request missing subject for skip flow")
 		}
 
+		if !isKratosIdentityID(subject) {
+			if provider := IdentityHintProviderFromContext(ctx); provider != nil {
+				identityID, err := provider.IdentityHint(ctx)
+				if err != nil {
+					return nil, mapIdentityHintError(challengeID, err)
+				}
+
+				identityID = strings.TrimSpace(identityID)
+				if identityID == "" {
+					return nil, NewSessionInvalidError(challengeID)
+				}
+
+				if !isKratosIdentityID(identityID) {
+					return nil, NewSessionInvalidError(challengeID)
+				}
+
+				subject = identityID
+			}
+		}
+
+		if !isKratosIdentityID(subject) {
+			return nil, NewSessionInvalidError(challengeID)
+		}
+
+		contextData = ensureLoginContextIdentity(contextData, subject)
+
 		payload := hydraAdmin.NewAcceptOAuth2LoginRequest(subject)
 		payload.SetRemember(true)
 		payload.SetRememberFor(s.rememberFor)
+		if contextData != nil {
+			payload.SetContext(contextData)
+		}
 
 		redirect, resp, err := s.hydra.AcceptLoginRequest(ctx, challengeID, payload)
 		if err != nil {
@@ -165,7 +205,7 @@ func (s *service) ResolveLogin(ctx context.Context, challengeID string) (*Resolu
 		return nil, mapIdentityError(challengeID, err)
 	}
 
-	payload := hydraAdmin.NewAcceptOAuth2LoginRequest(profile.Email)
+	payload := hydraAdmin.NewAcceptOAuth2LoginRequest(profile.ID)
 	payload.SetRemember(true)
 	payload.SetRememberFor(s.rememberFor)
 	payload.SetContext(buildLoginContext(profile))
@@ -327,7 +367,9 @@ func mapHydraError(flow FlowType, challengeID string, resp *http.Response, err e
 		case http.StatusNotFound, http.StatusGone:
 			return NewInvalidChallengeError(challengeID)
 		case http.StatusBadRequest:
-			return NewError(http.StatusBadRequest, "invalid_challenge", fmt.Sprintf("hydra rejected %s challenge", flow), challengeID, nil)
+			return NewError(
+				http.StatusBadRequest, "invalid_challenge", fmt.Sprintf("hydra rejected %s challenge", flow), challengeID, nil,
+			)
 		}
 	}
 
@@ -451,4 +493,55 @@ func readIdentityID(ctx interface{}) string {
 		}
 	}
 	return ""
+}
+
+func ensureLoginContextIdentity(ctx interface{}, identityID string) interface{} {
+	identityID = strings.TrimSpace(identityID)
+	if identityID == "" {
+		return ctx
+	}
+
+	switch value := ctx.(type) {
+	case map[string]any:
+		if existing, ok := value[identityContextKey]; ok {
+			existingID := strings.TrimSpace(fmt.Sprint(existing))
+			if existingID == identityID {
+				return value
+			}
+		}
+		value[identityContextKey] = identityID
+		return value
+	case nil:
+		return map[string]any{identityContextKey: identityID}
+	default:
+		return map[string]any{identityContextKey: identityID}
+	}
+}
+
+func readLoginContext(req *hydraAdmin.OAuth2LoginRequest) interface{} {
+	if req == nil {
+		return nil
+	}
+
+	if req.AdditionalProperties == nil {
+		return nil
+	}
+
+	if ctx, ok := req.AdditionalProperties["context"]; ok {
+		return ctx
+	}
+
+	return nil
+}
+
+func isKratosIdentityID(value string) bool {
+	if value == "" {
+		return false
+	}
+
+	if _, err := uuid.Parse(value); err != nil {
+		return false
+	}
+
+	return true
 }

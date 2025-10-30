@@ -10,15 +10,12 @@ import (
 
 func TestLoadSuccess(t *testing.T) {
 	setEnv(t, map[string]string{
-		"OIDC_HYDRA_ADMIN_URL":      "https://hydra-admin.local",
-		"OIDC_HYDRA_PUBLIC_URL":     "https://hydra.local",
-		"OIDC_KRATOS_ADMIN_URL":     "https://kratos-admin.local",
-		"OIDC_KRATOS_PUBLIC_URL":    "https://kratos-public.local",
-		"OIDC_SYNAPSE_CALLBACK_URL": "https://synapse.local/callback",
-		"OIDC_COOKIE_DOMAIN":        "local.alkem.io",
-		"OIDC_MAINTENANCE_MODE":     "true",
-		"OIDC_MAINTENANCE_RETRY":    "30",
-		"OIDC_LOG_LEVEL":            "warn",
+		"OIDC_HYDRA_ADMIN_URL":   "https://hydra-admin.local",
+		"OIDC_KRATOS_ADMIN_URL":  "https://kratos-admin.local",
+		"OIDC_KRATOS_PUBLIC_URL": "https://kratos-public.local",
+		"OIDC_MAINTENANCE_MODE":  "true",
+		"OIDC_MAINTENANCE_RETRY": "30",
+		"OIDC_LOG_LEVEL":         "warn",
 	})
 
 	cfg, err := Load()
@@ -26,7 +23,6 @@ func TestLoadSuccess(t *testing.T) {
 	require.NotNil(t, cfg)
 
 	require.Equal(t, "https://hydra-admin.local", cfg.HydraAdminURL)
-	require.Equal(t, "https://hydra.local", cfg.HydraPublicURL)
 	require.Equal(t, "https://kratos-public.local", cfg.KratosPublicURL)
 	require.Equal(t, time.Duration(5)*time.Second, cfg.ReadinessTimeout)
 
@@ -39,7 +35,6 @@ func TestLoadSuccess(t *testing.T) {
 func TestLoadMissingValue(t *testing.T) {
 	setEnv(t, map[string]string{
 		"OIDC_HYDRA_ADMIN_URL":   "https://hydra-admin.local",
-		"OIDC_HYDRA_PUBLIC_URL":  "https://hydra.local",
 		"OIDC_KRATOS_PUBLIC_URL": "https://kratos-public.local",
 	})
 
@@ -50,12 +45,9 @@ func TestLoadMissingValue(t *testing.T) {
 
 func TestLoadRejectsNonHTTPS(t *testing.T) {
 	setEnv(t, map[string]string{
-		"OIDC_HYDRA_ADMIN_URL":      "http://hydra-admin.local",
-		"OIDC_HYDRA_PUBLIC_URL":     "https://hydra.local",
-		"OIDC_KRATOS_ADMIN_URL":     "https://kratos-admin.local",
-		"OIDC_KRATOS_PUBLIC_URL":    "https://kratos-public.local",
-		"OIDC_SYNAPSE_CALLBACK_URL": "https://synapse.local/callback",
-		"OIDC_COOKIE_DOMAIN":        "local.alkem.io",
+		"OIDC_HYDRA_ADMIN_URL":   "http://hydra-admin.local",
+		"OIDC_KRATOS_ADMIN_URL":  "https://kratos-admin.local",
+		"OIDC_KRATOS_PUBLIC_URL": "https://kratos-public.local",
 	})
 
 	_, err := Load()
@@ -64,13 +56,10 @@ func TestLoadRejectsNonHTTPS(t *testing.T) {
 
 func TestLoadAllowsHTTPWhenInsecureEnabled(t *testing.T) {
 	setEnv(t, map[string]string{
-		"OIDC_HYDRA_ADMIN_URL":      "http://hydra-admin.local",
-		"OIDC_HYDRA_PUBLIC_URL":     "https://hydra.local",
-		"OIDC_KRATOS_ADMIN_URL":     "http://kratos-admin.local",
-		"OIDC_KRATOS_PUBLIC_URL":    "http://kratos-public.local",
-		"OIDC_SYNAPSE_CALLBACK_URL": "https://synapse.local/callback",
-		"OIDC_COOKIE_DOMAIN":        "local.alkem.io",
-		"OIDC_ALLOW_INSECURE_HTTP":  "true",
+		"OIDC_HYDRA_ADMIN_URL":     "http://hydra-admin.local",
+		"OIDC_KRATOS_ADMIN_URL":    "http://kratos-admin.local",
+		"OIDC_KRATOS_PUBLIC_URL":   "http://kratos-public.local",
+		"OIDC_ALLOW_INSECURE_HTTP": "true",
 	})
 
 	cfg, err := Load()
@@ -81,13 +70,10 @@ func TestLoadAllowsHTTPWhenInsecureEnabled(t *testing.T) {
 
 func TestMaintenanceDisabled(t *testing.T) {
 	setEnv(t, map[string]string{
-		"OIDC_HYDRA_ADMIN_URL":      "https://hydra-admin.local",
-		"OIDC_HYDRA_PUBLIC_URL":     "https://hydra.local",
-		"OIDC_KRATOS_ADMIN_URL":     "https://kratos-admin.local",
-		"OIDC_KRATOS_PUBLIC_URL":    "https://kratos-public.local",
-		"OIDC_SYNAPSE_CALLBACK_URL": "https://synapse.local/callback",
-		"OIDC_COOKIE_DOMAIN":        "local.alkem.io",
-		"OIDC_MAINTENANCE_MODE":     "false",
+		"OIDC_HYDRA_ADMIN_URL":   "https://hydra-admin.local",
+		"OIDC_KRATOS_ADMIN_URL":  "https://kratos-admin.local",
+		"OIDC_KRATOS_PUBLIC_URL": "https://kratos-public.local",
+		"OIDC_MAINTENANCE_MODE":  "false",
 	})
 
 	cfg, err := Load()
@@ -102,12 +88,9 @@ func setEnv(t *testing.T, values map[string]string) {
 
 	keys := []string{
 		"OIDC_HYDRA_ADMIN_URL",
-		"OIDC_HYDRA_PUBLIC_URL",
 		"OIDC_KRATOS_ADMIN_URL",
 		"OIDC_KRATOS_PUBLIC_URL",
-		"OIDC_SYNAPSE_CALLBACK_URL",
 		"OIDC_ADMIN_TOKEN",
-		"OIDC_COOKIE_DOMAIN",
 		"OIDC_MAINTENANCE_MODE",
 		"OIDC_MAINTENANCE_RETRY",
 		"OIDC_READINESS_TIMEOUT",

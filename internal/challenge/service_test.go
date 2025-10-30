@@ -15,7 +15,7 @@ func TestResolveLoginSkipUsesHydraSubject(t *testing.T) {
 	login := hydraAdmin.NewOAuth2LoginRequestWithDefaults()
 	login.SetChallenge("login-challenge")
 	login.SetSkip(true)
-	login.SetSubject("remembered-subject")
+	login.SetSubject("123e4567-e89b-12d3-a456-426614174000")
 
 	mock := &hydraClientMock{
 		getLogin: func(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2LoginRequest, *http.Response, error) {
@@ -25,7 +25,7 @@ func TestResolveLoginSkipUsesHydraSubject(t *testing.T) {
 		acceptLogin: func(ctx context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2LoginRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
 			require.Equal(t, "login-challenge", challengeID)
 			require.NotNil(t, body)
-			require.Equal(t, "remembered-subject", body.Subject)
+			require.Equal(t, "123e4567-e89b-12d3-a456-426614174000", body.Subject)
 			require.True(t, body.GetRemember())
 			require.Equal(t, int64(time.Hour.Seconds()), body.GetRememberFor())
 			return hydraAdmin.NewOAuth2RedirectTo("https://redirect.example"), &http.Response{StatusCode: http.StatusOK}, nil
@@ -47,6 +47,54 @@ func TestResolveLoginSkipUsesHydraSubject(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resolution)
 	require.Equal(t, "https://redirect.example", resolution.RedirectURL)
+}
+
+func TestResolveLoginSkipHydraSubjectInvalidUsesHint(t *testing.T) {
+	login := hydraAdmin.NewOAuth2LoginRequestWithDefaults()
+	login.SetChallenge("login-challenge")
+	login.SetSkip(true)
+	login.SetSubject("admin@alkem.io")
+
+	var capturedContext interface{}
+
+	mock := &hydraClientMock{
+		getLogin: func(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2LoginRequest, *http.Response, error) {
+			return login, &http.Response{StatusCode: http.StatusOK}, nil
+		},
+		acceptLogin: func(ctx context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2LoginRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
+			require.Equal(t, "login-challenge", challengeID)
+			require.Equal(t, "123e4567-e89b-12d3-a456-426614174001", body.Subject)
+			require.True(t, body.GetRemember())
+			require.Equal(t, int64(time.Hour.Seconds()), body.GetRememberFor())
+			capturedContext = body.GetContext()
+			return hydraAdmin.NewOAuth2RedirectTo("https://redirect.example"), &http.Response{StatusCode: http.StatusOK}, nil
+		},
+	}
+
+	idFetcher := identityFetcherStub{fetch: func(context.Context, string) (*IdentityProfile, error) {
+		t.Fatalf("identity fetch should not be called for skip flow")
+		return nil, nil
+	}}
+
+	svc := NewService(Options{
+		Hydra:       mock,
+		Identity:    idFetcher,
+		RememberFor: time.Hour,
+	})
+
+	provider := IdentityHintFunc(func(ctx context.Context) (string, error) {
+		return "123e4567-e89b-12d3-a456-426614174001", nil
+	})
+
+	ctx := WithIdentityHintProvider(context.Background(), provider)
+	resolution, err := svc.ResolveLogin(ctx, "login-challenge")
+	require.NoError(t, err)
+	require.NotNil(t, resolution)
+	require.Equal(t, "https://redirect.example", resolution.RedirectURL)
+
+	ctxMap, ok := capturedContext.(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "123e4567-e89b-12d3-a456-426614174001", ctxMap[identityContextKey])
 }
 
 func TestResolveLoginFetchesIdentityAndSetsContext(t *testing.T) {
@@ -89,7 +137,7 @@ func TestResolveLoginFetchesIdentityAndSetsContext(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "https://redirect.example", resolution.RedirectURL)
 
-	require.Equal(t, "user@example.com", capturedSubject)
+	require.Equal(t, "identity-id", capturedSubject)
 
 	ctxMap, ok := capturedContext.(map[string]any)
 	require.True(t, ok)
@@ -138,7 +186,7 @@ func TestResolveLoginUsesIdentityHintProvider(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resolution)
 	require.Equal(t, "https://redirect.example", resolution.RedirectURL)
-	require.Equal(t, "user@example.com", capturedSubject)
+	require.Equal(t, "identity-hint", capturedSubject)
 	require.Equal(t, 1, providerCalls)
 }
 

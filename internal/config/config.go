@@ -12,18 +12,15 @@ import (
 
 // ServiceConfig captures runtime configuration sourced from environment variables.
 type ServiceConfig struct {
-	HydraAdminURL      string        `envconfig:"HYDRA_ADMIN_URL" required:"true"`
-	HydraPublicURL     string        `envconfig:"HYDRA_PUBLIC_URL" required:"true"`
-	KratosAdminURL     string        `envconfig:"KRATOS_ADMIN_URL" required:"true"`
-	KratosPublicURL    string        `envconfig:"KRATOS_PUBLIC_URL" required:"true"`
-	SynapseCallbackURL string        `envconfig:"SYNAPSE_CALLBACK_URL" required:"true"`
-	AuthToken          string        `envconfig:"ADMIN_TOKEN"`
-	CookieDomain       string        `envconfig:"COOKIE_DOMAIN" required:"true"`
-	MaintenanceMode    bool          `envconfig:"MAINTENANCE_MODE" default:"false"`
-	RetryAfterSeconds  int           `envconfig:"MAINTENANCE_RETRY" default:"0"`
-	AllowInsecureHTTP  bool          `envconfig:"ALLOW_INSECURE_HTTP" default:"false"`
-	ReadinessTimeout   time.Duration `envconfig:"READINESS_TIMEOUT" default:"5s"`
-	LogLevel           string        `envconfig:"LOG_LEVEL" default:"info"`
+	HydraAdminURL     string        `envconfig:"HYDRA_ADMIN_URL" required:"true"`
+	KratosAdminURL    string        `envconfig:"KRATOS_ADMIN_URL" required:"true"`
+	KratosPublicURL   string        `envconfig:"KRATOS_PUBLIC_URL" required:"true"`
+	AuthToken         string        `envconfig:"ADMIN_TOKEN"`
+	MaintenanceMode   bool          `envconfig:"MAINTENANCE_MODE" default:"false"`
+	RetryAfterSeconds int           `envconfig:"MAINTENANCE_RETRY" default:"0"`
+	AllowInsecureHTTP bool          `envconfig:"ALLOW_INSECURE_HTTP" default:"false"`
+	ReadinessTimeout  time.Duration `envconfig:"READINESS_TIMEOUT" default:"5s"`
+	LogLevel          string        `envconfig:"LOG_LEVEL" default:"info"`
 }
 
 // MaintenanceState exposes the cached maintenance toggle information.
@@ -61,19 +58,10 @@ func (cfg *ServiceConfig) validate() error {
 	if err := cfg.requireSecureURL(cfg.HydraAdminURL, "OIDC_HYDRA_ADMIN_URL"); err != nil {
 		return err
 	}
-	if err := assertNotEmpty(cfg.HydraPublicURL, "OIDC_HYDRA_PUBLIC_URL"); err != nil {
-		return err
-	}
 	if err := cfg.requireSecureURL(cfg.KratosAdminURL, "OIDC_KRATOS_ADMIN_URL"); err != nil {
 		return err
 	}
 	if err := cfg.requireSecureURL(cfg.KratosPublicURL, "OIDC_KRATOS_PUBLIC_URL"); err != nil {
-		return err
-	}
-	if err := assertNotEmpty(cfg.SynapseCallbackURL, "OIDC_SYNAPSE_CALLBACK_URL"); err != nil {
-		return err
-	}
-	if err := assertNotEmpty(cfg.CookieDomain, "OIDC_COOKIE_DOMAIN"); err != nil {
 		return err
 	}
 	if cfg.RetryAfterSeconds < 0 {

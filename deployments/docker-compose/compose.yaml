@@ -1,0 +1,16 @@
+version: '3.9'
+services:
+  oidc-service:
+    image: docker.io/alkemio/oidc-service:latest
+    restart: unless-stopped
+    ports:
+      - "8085:8085"
+    env_file:
+      - ../../configs/env.sample
+    environment:
+      OIDC_ADMIN_TOKEN: ${OIDC_ADMIN_TOKEN:?set OIDC_ADMIN_TOKEN in your environment}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

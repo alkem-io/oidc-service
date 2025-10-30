@@ -7,13 +7,13 @@ alongside the Synapse + Hydra + Kratos stack used in Alkemio development.
 
 - Docker Desktop 4.30+ (Docker Engine 24+) with Compose v2
 - Access to pull `docker.io/alkemio/oidc-service`
-- The Alkemio server quickstart stack (`quickstart-services-ai.yml`)
+- The Alkemio server quickstart stack (`quickstart-services.yml`)
 - A configuration file based on `configs/env.sample`
 
 ## 1. Pull required images
 
 ```sh
-docker compose -f quickstart-services-ai.yml pull hydra kratos mailslurper synapse
+docker compose -f quickstart-services.yml pull hydra kratos mailslurper synapse
 docker pull docker.io/alkemio/oidc-service:latest
 ```
 
@@ -27,7 +27,7 @@ cp configs/env.sample .env.oidc
 ## 3. Launch supporting services
 
 ```sh
-docker compose -f quickstart-services-ai.yml up -d hydra kratos mailslurper synapse
+docker compose -f quickstart-services.yml up -d hydra kratos mailslurper synapse
 ```
 
 ## 4. Run the OIDC Service container
@@ -84,12 +84,27 @@ curl -s http://localhost:8085/metrics | grep oidc_challenge_latency_seconds
 Latency histograms and counters confirm the metrics endpoint is wired for
 observability dashboards.
 
-## 9. CI image publishing (reference)
+## 9. GitHub Actions overview
 
-- Push changes to `main` in the dedicated repository.
-- GitHub Actions workflow `build-release-docker-hub.yml` runs lint, tests, builds
-the binary, and publishes `docker.io/alkemio/oidc-service` with semantic version
-tags and immutable digests.
+The legacy `ci.yml` and `release.yml` jobs have been removed. The service now
+ships with the following workflows under `.github/workflows/`:
+
+- `pr-build.yml` — builds the container image for pull requests against any path.
+- `build-release-docker-hub.yml` — publishes `docker.io/alkemio/oidc-service`
+  when a release is published.
+- `build-deploy-k8s-dev-hetzner.yml` — builds the image and deploys to the dev
+  Hetzner cluster on pushes to `develop`.
+- `build-deploy-k8s-sandbox-hetzner.yml` — manual deployment to the sandbox
+  Hetzner environment via `workflow_dispatch`.
+- `build-deploy-k8s-test-hetzner.yml` — manual deployment to the test Hetzner
+  environment via `workflow_dispatch`.
+- `schema-contract.yml` — lints the OpenAPI contract and diff-checks pull
+  requests touching `contracts/` or documentation.
+- `trigger-e2e-tests.yml` — notifies the external `alkem-io/test-suites`
+  repository to execute end-to-end verification on release publication.
+
+Consult the repository secrets to ensure Docker registry and Travis API tokens
+are available before invoking the release or deployment workflows.
 
 ## Troubleshooting
 

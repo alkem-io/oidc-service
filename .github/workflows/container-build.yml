@@ -21,3 +21,10 @@ jobs:
         run: |
           IMAGE="${{ secrets.REGISTRY_LOGIN_SERVER }}/alkemio-oidc-service"
           docker build -f Dockerfile . -t ${IMAGE}:${{ github.sha }}
+
+      - name: Push container image
+        run: |
+          IMAGE="${{ secrets.REGISTRY_LOGIN_SERVER }}/alkemio-oidc-service"
+          docker push ${IMAGE}:${{ github.sha }}
+          docker tag ${IMAGE}:${{ github.sha }} ${IMAGE}:latest
+          docker push ${IMAGE}:latest

@@ -170,8 +170,8 @@ func (s *service) ResolveLogin(ctx context.Context, challengeID string) (*Resolu
 		payload := hydraAdmin.NewAcceptOAuth2LoginRequest(subject)
 		payload.SetRemember(true)
 		payload.SetRememberFor(s.rememberFor)
-		if contextData != nil {
-			payload.SetContext(contextData)
+		if contextMap, ok := contextData.(map[string]any); ok {
+			payload.SetContext(contextMap)
 		}
 
 		redirect, resp, err := s.hydra.AcceptLoginRequest(ctx, challengeID, payload)

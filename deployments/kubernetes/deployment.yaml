@@ -23,7 +23,7 @@ spec:
       containers:
         - name: oidc-service
           image: registry.example.com/alkemio-oidc-service:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 8085

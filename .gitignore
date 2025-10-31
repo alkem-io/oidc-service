@@ -1,0 +1,38 @@
+# Build artifacts
+/dist
+/bin
+/build
+
+# Dependencies
+/node_modules
+/vendor
+
+# IDE and editor settings
+.idea/
+.vscode/
+*.sublime-workspace
+*.sublime-project
+
+# Logs
+logs/
+*.log
+*.out
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
+
+tmp/
+
+# Go build cache
+*.test
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+go.sum.tmp

@@ -1,0 +1,49 @@
+# Alkemio OIDC Service Engineering Constitution
+
+## Core Principles
+
+1. **Domain-Oriented Packages First**
+   - Business logic for Hydra/Kratos orchestration lives under `internal/challenge` as pure Go structs.
+   - HTTP handlers in `internal/server` remain thin and delegate to orchestration services.
+2. **Deterministic Configuration**
+   - All runtime settings flow through typed structs in `internal/config`; no package reads from `os.Getenv` outside bootstrap.
+3. **Secure External Integrations**
+   - Hydra and Kratos clients enforce request-scoped timeouts, structured error translation, and never log tokens or secrets.
+4. **Operational Observability**
+   - Zap logging includes correlation IDs, challenge IDs, and outcome status. Prometheus metrics expose latency histograms and counters for every request path.
+5. **Fail-Fast Maintenance Controls**
+   - Maintenance mode immediately returns HTTP 503 with Retry-After headers without touching external services.
+6. **Test-Driven Delivery**
+   - Contract tests exercise OpenAPI behaviour before handler implementation. Integration tests cover Hydra/Kratos error paths and maintenance toggles.
+7. **Reproducible Containers**
+   - Docker builds pin base image digests, run `go test` and `go build` in multi-stage pipeline, and produce distroless runtime images.
+8. **CI Integrity**
+   - GitHub Actions pipelines run linting, unit tests, integration smoke, SBOM generation, and signed Docker pushes before releases.
+
+## Architecture Standards
+
+- Directory layout:
+  - `cmd/server`: entrypoint wiring configuration and HTTP server start.
+  - `internal/*`: non-exported packages encapsulating config, clients, middleware, and domain orchestration.
+  - `pkg/telemetry`: shared instrumentation utilities safe for reuse.
+  - `configs/`: sample environment files and documentation.
+  - `contracts/`: OpenAPI definitions and generated fixtures.
+  - `docs/`: operational runbooks and quickstarts.
+- Interfaces to external systems (`internal/hydra`, `internal/kratos`) expose narrow methods consumed by the challenge service.
+- Health endpoints (`/health/live`, `/health/ready`) MUST satisfy constitution observability principle with structured JSON responses.
+- Maintenance middleware short-circuits request handling while still recording metrics.
+
+## Engineering Workflow
+
+- Execute Spec Kit phases sequentially: research → design → tasks → implementation → validation.
+- Tests (`go test ./...`) MUST pass before merging. Contract tests run under `test/contract`; integration tests use `httptest` with mocked Hydra/Kratos clients.
+- Any change to OpenAPI contracts requires regenerating associated fixtures and reviewing downstream consumers.
+- Release bumps require update to `docs/operations.md` and changelog entry summarizing risk.
+
+## Governance
+
+- Deviations from this constitution are documented in Spec Kit plans with mitigation timelines.
+- Major changes (new external dependency, architecture shift) require constitution update and review.
+- Operability incidents result in follow-up tasks captured in Spec Kit memory.
+
+**Version**: 1.0.0 | **Ratified**: 2025-10-29 | **Last Amended**: 2025-10-29

@@ -41,6 +41,16 @@ func (s *stubService) resolve(_ context.Context, flow string, challengeID string
 		return nil, NewMissingTraitsError(challengeID, []string{"traits.email", "traits.display_name"})
 	case "test":
 		return &Resolution{RedirectURL: s.buildRedirect(flow, challengeID)}, nil
+	case "email-verified", "email-unverified", "no-email", "multiple-emails":
+		return &Resolution{RedirectURL: s.buildRedirect(flow, challengeID)}, nil
+	case "terms-accepted", "terms-not-accepted", "no-terms-trait":
+		return &Resolution{RedirectURL: s.buildRedirect(flow, challengeID)}, nil
+	case "terms-string-true", "terms-string-false", "terms-invalid-value", "terms-null-value":
+		return &Resolution{RedirectURL: s.buildRedirect(flow, challengeID)}, nil
+	case "profile-claims", "partial-profile", "no-profile", "utf8-names", "empty-names":
+		return &Resolution{RedirectURL: s.buildRedirect(flow, challengeID)}, nil
+	case "id-token-profile-claims":
+		return &Resolution{RedirectURL: s.buildRedirect(flow, challengeID)}, nil
 	default:
 		return nil, NewInvalidChallengeError(challengeID)
 	}

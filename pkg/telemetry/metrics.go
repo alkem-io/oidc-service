@@ -13,17 +13,25 @@ type ChallengeRecorder interface {
 	ObserveChallenge(flow, outcome, errorCode string, duration time.Duration)
 }
 
+// TokenClaimsRecorder observes token claim generation metrics.
+type TokenClaimsRecorder interface {
+	ObserveTokenClaims(tokenType string, claimsCount int, hasEnhancedClaims bool)
+}
+
 // MetricsProvider exposes Prometheus collectors and handlers.
 type MetricsProvider interface {
 	ChallengeRecorder
+	TokenClaimsRecorder
 	Handler() http.Handler
 }
 
 // Metrics registers and publishes Prometheus collectors for the service.
 type Metrics struct {
-	registry         *prometheus.Registry
-	challengeLatency *prometheus.HistogramVec
-	challengeTotal   *prometheus.CounterVec
+	registry             *prometheus.Registry
+	challengeLatency     *prometheus.HistogramVec
+	challengeTotal       *prometheus.CounterVec
+	tokenClaimsTotal     *prometheus.CounterVec
+	tokenClaimsGenerated *prometheus.HistogramVec
 }
 
 // NewMetrics constructs a metrics provider backed by the supplied registry.
@@ -47,9 +55,22 @@ func NewMetrics(reg *prometheus.Registry) *Metrics {
 			Name:      "total",
 			Help:      "Total number of Hydra challenges processed.",
 		}, []string{"flow", "outcome", "error_code"}),
+		tokenClaimsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: "oidc",
+			Subsystem: "token",
+			Name:      "claims_total",
+			Help:      "Total number of tokens generated with enhanced claims.",
+		}, []string{"token_type", "has_enhanced_claims"}),
+		tokenClaimsGenerated: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Namespace: "oidc",
+			Subsystem: "token",
+			Name:      "claims_count",
+			Help:      "Number of enhanced claims added to tokens.",
+			Buckets:   []float64{0, 1, 2, 3, 4, 5, 10},
+		}, []string{"token_type"}),
 	}
 
-	reg.MustRegister(m.challengeLatency, m.challengeTotal)
+	reg.MustRegister(m.challengeLatency, m.challengeTotal, m.tokenClaimsTotal, m.tokenClaimsGenerated)
 
 	return m
 }
@@ -79,4 +100,23 @@ func (m *Metrics) ObserveChallenge(flow, outcome, errorCode string, duration tim
 
 	m.challengeLatency.WithLabelValues(flow, outcome).Observe(duration.Seconds())
 	m.challengeTotal.WithLabelValues(flow, outcome, errorCode).Inc()
+}
+
+// ObserveTokenClaims records token claim generation metrics.
+func (m *Metrics) ObserveTokenClaims(tokenType string, claimsCount int, hasEnhancedClaims bool) {
+	if m == nil {
+		return
+	}
+
+	if tokenType == "" {
+		tokenType = "unknown"
+	}
+
+	enhancedClaimsStr := "false"
+	if hasEnhancedClaims {
+		enhancedClaimsStr = "true"
+	}
+
+	m.tokenClaimsTotal.WithLabelValues(tokenType, enhancedClaimsStr).Inc()
+	m.tokenClaimsGenerated.WithLabelValues(tokenType).Observe(float64(claimsCount))
 }

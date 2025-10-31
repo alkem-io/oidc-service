@@ -35,6 +35,11 @@ type IdentityFetcher interface {
 	Fetch(ctx context.Context, identityID string) (*IdentityProfile, error)
 }
 
+// TokenClaimsRecorder observes token claim generation metrics.
+type TokenClaimsRecorder interface {
+	ObserveTokenClaims(tokenType string, claimsCount int, hasEnhancedClaims bool)
+}
+
 // Options configures the challenge service orchestrator.
 type Options struct {
 	Hydra            HydraClient
@@ -44,7 +49,25 @@ type Options struct {
 	HydraProbe       ReadinessProbe
 	KratosProbe      ReadinessProbe
 	ReadinessTimeout time.Duration
+	Logger           Logger
+	Metrics          TokenClaimsRecorder
 }
+
+// Logger defines the logging interface used by the challenge service.
+type Logger interface {
+	Info(msg string, fields ...interface{})
+	Warn(msg string, fields ...interface{})
+	Error(msg string, fields ...interface{})
+	Debug(msg string, fields ...interface{})
+}
+
+// noopLogger provides a Logger implementation that discards all log messages.
+type noopLogger struct{}
+
+func (noopLogger) Info(string, ...interface{})  {}
+func (noopLogger) Warn(string, ...interface{})  {}
+func (noopLogger) Error(string, ...interface{}) {}
+func (noopLogger) Debug(string, ...interface{}) {}
 
 type service struct {
 	hydra             HydraClient
@@ -54,6 +77,8 @@ type service struct {
 	hydraProbe        ReadinessProbe
 	kratosProbe       ReadinessProbe
 	readyTimeout      time.Duration
+	logger            Logger
+	metrics           TokenClaimsRecorder
 }
 
 // ReadinessProbe evaluates upstream availability for readiness reporting.
@@ -104,6 +129,11 @@ func NewService(opts Options) (Service, error) {
 		timeout = defaultReadinessTimeout
 	}
 
+	logger := opts.Logger
+	if logger == nil {
+		logger = noopLogger{}
+	}
+
 	return &service{
 		hydra:             opts.Hydra,
 		identity:          opts.Identity,
@@ -112,6 +142,8 @@ func NewService(opts Options) (Service, error) {
 		hydraProbe:        opts.HydraProbe,
 		kratosProbe:       opts.KratosProbe,
 		readyTimeout:      timeout,
+		logger:            logger,
+		metrics:           opts.Metrics,
 	}, nil
 }
 
@@ -251,8 +283,8 @@ func (s *service) ResolveConsent(ctx context.Context, challengeID string) (*Reso
 	payload.SetContext(buildConsentContext(profile))
 
 	session := hydraAdmin.NewAcceptOAuth2ConsentRequestSession()
-	session.SetIdToken(buildIDTokenClaims(profile))
-	session.SetAccessToken(buildAccessTokenClaims(profile))
+	session.SetIdToken(s.buildIDTokenClaims(profile))
+	session.SetAccessToken(s.buildAccessTokenClaims(profile))
 	payload.SetSession(*session)
 
 	redirect, resp, err := s.hydra.AcceptConsentRequest(ctx, challengeID, payload)
@@ -434,7 +466,7 @@ func buildConsentContext(profile *IdentityProfile) map[string]any {
 	return context
 }
 
-func buildIDTokenClaims(profile *IdentityProfile) map[string]any {
+func (s *service) buildIDTokenClaims(profile *IdentityProfile) map[string]any {
 	claims := map[string]any{
 		"email":        profile.Email,
 		"display_name": profile.DisplayName,
@@ -442,10 +474,32 @@ func buildIDTokenClaims(profile *IdentityProfile) map[string]any {
 	if profile.MatrixUserID != "" {
 		claims["matrix_user_id"] = profile.MatrixUserID
 	}
+
+	// Add enhanced token claims if available
+	enhancedClaimsMap := make(map[string]any)
+	if profile.TokenClaims != nil && !profile.TokenClaims.IsEmpty() {
+		enhancedClaimsMap = profile.TokenClaims.ToIDTokenMap()
+		for key, value := range enhancedClaimsMap {
+			claims[key] = value
+		}
+
+		if s.logger != nil {
+			s.logger.Debug("added enhanced claims to ID token",
+				"identity_id", profile.ID,
+				"claims_added", len(enhancedClaimsMap),
+			)
+		}
+	}
+
+	// Record metrics for ID token claims
+	if s.metrics != nil {
+		s.metrics.ObserveTokenClaims("id_token", len(enhancedClaimsMap), len(enhancedClaimsMap) > 0)
+	}
+
 	return claims
 }
 
-func buildAccessTokenClaims(profile *IdentityProfile) map[string]any {
+func (s *service) buildAccessTokenClaims(profile *IdentityProfile) map[string]any {
 	claims := map[string]any{
 		"email":            profile.Email,
 		"display_name":     profile.DisplayName,
@@ -457,6 +511,28 @@ func buildAccessTokenClaims(profile *IdentityProfile) map[string]any {
 	if len(profile.Traits) > 0 {
 		claims["traits"] = cloneTraits(profile.Traits)
 	}
+
+	// Add enhanced token claims for Access tokens (name claims only)
+	enhancedClaimsMap := make(map[string]any)
+	if profile.TokenClaims != nil && !profile.TokenClaims.IsEmpty() {
+		enhancedClaimsMap = profile.TokenClaims.ToAccessTokenMap()
+		for key, value := range enhancedClaimsMap {
+			claims[key] = value
+		}
+
+		if s.logger != nil {
+			s.logger.Debug("added enhanced claims to access token",
+				"identity_id", profile.ID,
+				"claims_added", len(enhancedClaimsMap),
+			)
+		}
+	}
+
+	// Record metrics for access token claims
+	if s.metrics != nil {
+		s.metrics.ObserveTokenClaims("access_token", len(enhancedClaimsMap), len(enhancedClaimsMap) > 0)
+	}
+
 	return claims
 }
 

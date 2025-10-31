@@ -84,6 +84,8 @@ func main() {
 		HydraProbe:       hydraProbe,
 		KratosProbe:      kratosProbe,
 		ReadinessTimeout: cfg.ReadinessTimeout,
+		Logger:           challenge.NewZapLoggerAdapter(logger),
+		Metrics:          metrics,
 	})
 	if err != nil {
 		fatal("configure challenge service", err)

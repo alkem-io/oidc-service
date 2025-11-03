@@ -54,7 +54,10 @@ Tracks whether the service is allowing traffic.
 | Env Var | Default | Description |
 |---------|---------|-------------|
 | `OIDC_HYDRA_ADMIN_URL` | none | Base URL for Hydra Admin API |
-| `OIDC_KRATOS_PUBLIC_URL` | none | Base URL for Kratos public API |
+| `OIDC_KRATOS_PUBLIC_URL` | none | Internal base URL for Kratos public API (service-to-service) |
+| `OIDC_KRATOS_BROWSER_URL` | none | External base URL for Kratos browser flows returned to clients |
+| `OIDC_WEB_BASE_URL` | none | Public web origin used to derive login return URL when explicit override absent |
+| `OIDC_LOGIN_RETURN_BASE_URL` | derived | External URL used for `return_to` when redirecting to Kratos login (defaults to `${OIDC_WEB_BASE_URL}/oidc/login`) |
 | `OIDC_HTTP_LISTEN_ADDR` | `:8080` | HTTP bind address |
 | `OIDC_REQUEST_TIMEOUT` | `5s` | Outbound request timeout |
 | `OIDC_SESSION_COOKIE` | `ory_kratos_session` | Kratos session cookie name |

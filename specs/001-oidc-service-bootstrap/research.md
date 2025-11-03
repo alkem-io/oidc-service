@@ -8,7 +8,7 @@ The legacy NestJS server bundled OIDC controllers that tightly coupled Hydra, Kr
 
 - Hydra provides Admin APIs for login and consent challenge retrieval/acceptance.
 - Kratos exposes REST endpoints for session resolution using HTTP cookies.
-- The Alkemio platform routes `/api/public/rest/oidc/*` traffic through Traefik and Oathkeeper to this service.
+- The Alkemio platform routes `/oidc/*` traffic (with legacy support for `/api/public/rest/oidc/*`) through Traefik and Oathkeeper to this service.
 - Contract tests already exist for login, consent, and health flows in `test/contract` and serve as executable specification.
 
 ## Key Questions

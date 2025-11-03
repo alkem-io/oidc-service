@@ -15,6 +15,9 @@ type ServiceConfig struct {
 	HydraAdminURL       string        `envconfig:"HYDRA_ADMIN_URL" required:"true"`
 	KratosAdminURL      string        `envconfig:"KRATOS_ADMIN_URL" required:"true"`
 	KratosPublicURL     string        `envconfig:"KRATOS_PUBLIC_URL" required:"true"`
+	KratosBrowserURL    string        `envconfig:"KRATOS_BROWSER_URL"`
+	LoginReturnBaseURL  string        `envconfig:"LOGIN_RETURN_BASE_URL"`
+	WebBaseURL          string        `envconfig:"WEB_BASE_URL"`
 	KratosSessionCookie string        `envconfig:"KRATOS_SESSION_COOKIE" default:"ory_kratos_session"`
 	AuthToken           string        `envconfig:"ADMIN_TOKEN"`
 	MaintenanceMode     bool          `envconfig:"MAINTENANCE_MODE" default:"false"`
@@ -54,6 +57,15 @@ func Load() (*ServiceConfig, error) {
 	if cfg.KratosSessionCookie == "" {
 		cfg.KratosSessionCookie = defaultKratosSessionCookie
 	}
+	cfg.KratosBrowserURL = strings.TrimSpace(cfg.KratosBrowserURL)
+	cfg.LoginReturnBaseURL = strings.TrimSpace(cfg.LoginReturnBaseURL)
+	cfg.WebBaseURL = strings.TrimSpace(cfg.WebBaseURL)
+
+	if cfg.LoginReturnBaseURL == "" {
+		if computed := cfg.computeLoginReturnBaseURL(); computed != "" {
+			cfg.LoginReturnBaseURL = computed
+		}
+	}
 
 	if err := cfg.validate(); err != nil {
 		return nil, err
@@ -72,6 +84,23 @@ func (cfg *ServiceConfig) validate() error {
 	if err := cfg.requireSecureURL(cfg.KratosPublicURL, "OIDC_KRATOS_PUBLIC_URL"); err != nil {
 		return err
 	}
+	if trimmed := strings.TrimSpace(cfg.KratosBrowserURL); trimmed != "" {
+		if err := cfg.requireSecureURL(trimmed, "OIDC_KRATOS_BROWSER_URL"); err != nil {
+			return err
+		}
+	}
+
+	if trimmed := strings.TrimSpace(cfg.WebBaseURL); trimmed != "" {
+		if err := cfg.requireSecureURL(trimmed, "OIDC_WEB_BASE_URL"); err != nil {
+			return err
+		}
+	}
+
+	if trimmed := strings.TrimSpace(cfg.LoginReturnBaseURL); trimmed != "" {
+		if err := cfg.requireSecureURL(trimmed, "OIDC_LOGIN_RETURN_BASE_URL"); err != nil {
+			return err
+		}
+	}
 	if cfg.RetryAfterSeconds < 0 {
 		return fmt.Errorf("OIDC_MAINTENANCE_RETRY must be >= 0")
 	}
@@ -85,6 +114,19 @@ func (cfg *ServiceConfig) validate() error {
 	}
 
 	return nil
+}
+
+func (cfg *ServiceConfig) computeLoginReturnBaseURL() string {
+	if cfg.WebBaseURL == "" {
+		return ""
+	}
+
+	base := strings.TrimRight(cfg.WebBaseURL, "/")
+	if base == "" {
+		return ""
+	}
+
+	return base + "/oidc/login"
 }
 
 func (cfg *ServiceConfig) requireSecureURL(raw, key string) error {

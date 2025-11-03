@@ -4,7 +4,7 @@ services:
     image: docker.io/alkemio/oidc-service:latest
     restart: unless-stopped
     ports:
-      - "8085:8080"
+      - "8080:8080"
     env_file:
       - ../../configs/env.sample
     environment:

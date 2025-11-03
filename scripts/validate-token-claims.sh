@@ -8,7 +8,7 @@ set -euo pipefail
 HYDRA_PUBLIC_URL="${HYDRA_PUBLIC_URL:-http://localhost:4444}"
 SYNAPSE_PUBLIC_URL="${SYNAPSE_PUBLIC_URL:-http://localhost:8008}"
 SYNAPSE_OIDC_CLIENT_ID="${SYNAPSE_OIDC_CLIENT_ID:-synapse}"
-OIDC_SERVICE_URL="${OIDC_SERVICE_URL:-http://localhost:8085}"
+OIDC_SERVICE_URL="${OIDC_SERVICE_URL:-http://localhost:8080}"
 KRATOS_ADMIN_URL="${KRATOS_ADMIN_URL:-http://localhost:4434}"
 
 # Colors for output

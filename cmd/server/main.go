@@ -92,12 +92,14 @@ func main() {
 	}
 
 	handler := server.NewRouter(server.Options{
-		Logger:          logger,
-		Maintenance:     maint,
-		Challenge:       challengeService,
-		Metrics:         metrics,
-		SessionResolver: sessionResolver,
-		SessionCookie:   cfg.KratosSessionCookie,
+		Logger:             logger,
+		Maintenance:        maint,
+		Challenge:          challengeService,
+		Metrics:            metrics,
+		SessionResolver:    sessionResolver,
+		SessionCookie:      cfg.KratosSessionCookie,
+		KratosBrowserURL:   cfg.KratosBrowserURL,
+		LoginReturnBaseURL: cfg.LoginReturnBaseURL,
 	})
 
 	srv := &http.Server{

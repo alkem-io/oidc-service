@@ -1,4 +1,19 @@
 # Operations Runbook
+## Login redirect behavior
+
+When a request reaches `/oidc/login` without a valid Kratos session, the service
+does not render JSON to the browser. Instead, it redirects the user-agent to the
+Kratos browser login endpoint with a `return_to` parameter pointing back to
+`${OIDC_WEB_BASE_URL}/oidc/login?...`.
+
+- If `OIDC_KRATOS_BROWSER_URL` is set, it is used to build the Kratos login URL.
+- If it is not set, the service infers scheme/host from `X-Forwarded-Proto` and
+   `X-Forwarded-Host` (as provided by Traefik) and uses a loopback-safe fallback
+   to avoid invalid hosts during local development.
+
+This ensures end-users never see JSON error payloads like `session_required` in
+their browser during normal flows.
+
 
 ## Maintenance Mode Toggle
 
@@ -34,7 +49,7 @@ optional `Retry-After` header derived from `OIDC_MAINTENANCE_RETRY`.
     - Regenerate a Hydra login challenge using the procedure from Quickstart Step 6
       (or the equivalent `curl` + `awk` command) and invoke the login endpoint:
     ```sh
-    curl -i "http://OIDC_SERVICE_HOST/v1/oidc/login?login_challenge=${LOGIN_CHALLENGE}"
+   curl -i "http://OIDC_SERVICE_HOST/oidc/login?login_challenge=${LOGIN_CHALLENGE}"
     ```
     Expect `HTTP 503` with `{"error":"maintenance_mode"...}` while maintenance is
     enabled.

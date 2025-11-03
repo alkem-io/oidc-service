@@ -19,12 +19,14 @@ import (
 
 // Options bundles router dependencies.
 type Options struct {
-	Logger          *zap.Logger
-	Maintenance     *maintenance.State
-	Challenge       challenge.Service
-	Metrics         telemetry.MetricsProvider
-	SessionResolver SessionIdentityResolver
-	SessionCookie   string
+	Logger             *zap.Logger
+	Maintenance        *maintenance.State
+	Challenge          challenge.Service
+	Metrics            telemetry.MetricsProvider
+	SessionResolver    SessionIdentityResolver
+	SessionCookie      string
+	KratosBrowserURL   string
+	LoginReturnBaseURL string
 }
 
 // NewRouter wires core middleware and health endpoints.
@@ -98,25 +100,33 @@ func NewRouter(opts Options) http.Handler {
 
 	loginHandler := NewLoginHandler(
 		LoginHandlerConfig{
-			Logger:          opts.Logger,
-			Challenge:       opts.Challenge,
-			Metrics:         opts.Metrics,
-			SessionResolver: opts.SessionResolver,
-			SessionCookie:   opts.SessionCookie,
+			Logger:           opts.Logger,
+			Challenge:        opts.Challenge,
+			Metrics:          opts.Metrics,
+			SessionResolver:  opts.SessionResolver,
+			SessionCookie:    opts.SessionCookie,
+			KratosBrowserURL: opts.KratosBrowserURL,
+			ReturnBaseURL:    opts.LoginReturnBaseURL,
 		},
 	)
-	r.Get(
-		"/v1/oidc/login", func(w http.ResponseWriter, r *http.Request) {
-			loginHandler.Handle(w, r)
-		},
-	)
+	for _, path := range []string{"/v1/oidc/login", "/oidc/login"} {
+		route := path
+		r.Get(
+			route, func(w http.ResponseWriter, r *http.Request) {
+				loginHandler.Handle(w, r)
+			},
+		)
+	}
 
 	consentHandler := NewConsentHandler(opts.Logger, opts.Challenge, opts.Metrics)
-	r.Get(
-		"/v1/oidc/consent", func(w http.ResponseWriter, r *http.Request) {
-			consentHandler.Handle(w, r)
-		},
-	)
+	for _, path := range []string{"/v1/oidc/consent", "/oidc/consent"} {
+		route := path
+		r.Get(
+			route, func(w http.ResponseWriter, r *http.Request) {
+				consentHandler.Handle(w, r)
+			},
+		)
+	}
 
 	r.Get(
 		"/metrics", func(w http.ResponseWriter, r *http.Request) {

@@ -26,7 +26,21 @@ docker pull docker.io/alkemio/oidc-service:latest
 
 ```sh
 cp configs/env.sample .env.oidc
-# Edit .env.oidc with Hydra/Kratos URLs, admin tokens, cookie domain, and maintenance toggle
+# Edit .env.oidc with minimal required variables.
+#
+# Minimal required (internal addresses):
+#   OIDC_HYDRA_ADMIN_URL=http://hydra:4445
+#   OIDC_KRATOS_ADMIN_URL=http://kratos:4434
+#   OIDC_KRATOS_PUBLIC_URL=http://kratos:4433
+#   OIDC_WEB_BASE_URL=http://localhost:3000  # public origin for return_to
+#
+# Optional:
+#   # If unset, the service infers scheme/host from X-Forwarded-* and falls back safely.
+#   # Set only when you must force a specific external auth host.
+#   # OIDC_KRATOS_BROWSER_URL=http://localhost:3000/ory/kratos/public
+#
+#   # Override return base (defaults to ${OIDC_WEB_BASE_URL}/oidc/login)
+#   # OIDC_LOGIN_RETURN_BASE_URL=http://localhost:3000/oidc/login
 ```
 
 ## 3. Launch supporting services
@@ -41,14 +55,14 @@ docker compose -f quickstart-services.yml up -d hydra kratos mailslurper synapse
 docker run --rm \
   --env-file .env.oidc \
   --name oidc-service \
-  -p 8085:8080 \
+  -p 8080:8080 \
   docker.io/alkemio/oidc-service:latest
 ```
 
 ## 5. Verify readiness
 
 ```sh
-curl -sSf http://localhost:8085/health/ready | jq
+curl -sSf http://localhost:8080/health/ready | jq
 ```
 
 A healthy service returns a payload similar to:
@@ -81,14 +95,23 @@ A healthy service returns a payload similar to:
    `login_challenge` query value from the `Location` header and stores it in the
    shell variable shown in the final `echo`.
 
-2. Call the OIDC service with the captured challenge:
+2. Call the OIDC service with the captured challenge (public endpoints are under `/oidc`):
 
     ```sh
-    curl -i "http://localhost:8085/v1/oidc/login?login_challenge=${LOGIN_CHALLENGE}"
+  curl -i "http://localhost:8080/oidc/login?login_challenge=${LOGIN_CHALLENGE}"
     ```
 
-Expect an HTTP `302` redirect when Hydra accepts the challenge, or structured
-`4xx` errors when the challenge is invalid or missing identity traits.
+Expect an HTTP `302` redirect when Hydra accepts the challenge. If your browser
+has no Kratos session, the service redirects you to the Kratos browser login at
+`/ory/kratos/public/self-service/login/browser` with `return_to` back to
+`${OIDC_WEB_BASE_URL}/oidc/login?...`. Structured `4xx` errors return only to
+API clients (e.g., curl) for invalid challenges.
+
+### Traefik & Hydra wiring (dev stack)
+
+- Traefik: route `/oidc/*` directly to the OIDC service.
+- Hydra: set `URLS_LOGIN=${HYDRA_PUBLIC_URL}/oidc/login` and
+  `URLS_CONSENT=${HYDRA_PUBLIC_URL}/oidc/consent`.
 
 ## 7. Toggle maintenance mode
 
@@ -96,10 +119,10 @@ Expect an HTTP `302` redirect when Hydra accepts the challenge, or structured
 docker run --rm \
   --env-file .env.oidc \
   -e OIDC_MAINTENANCE_MODE=true \
-  -p 8085:8080 \
+  -p 8080:8080 \
   docker.io/alkemio/oidc-service:latest
 # regenerate LOGIN_CHALLENGE by rerunning the Step 6 command
-curl -i "http://localhost:8085/v1/oidc/login?login_challenge=${LOGIN_CHALLENGE}"
+curl -i "http://localhost:8080/oidc/login?login_challenge=${LOGIN_CHALLENGE}"
 ```
 
 During maintenance the service responds with HTTP `503` and a JSON body
@@ -134,13 +157,13 @@ For manual testing, examine the token claims after completing the login flow:
 # ID Token will include: given_name, family_name, email_verified, accepted_terms
 
 # Check token claims metrics
-curl -s http://localhost:8085/metrics | grep -E "(token_claims|claim_extraction)"
+curl -s http://localhost:8080/metrics | grep -E "(token_claims|claim_extraction)"
 ```
 
 ## 9. Inspect Prometheus metrics
 
 ```sh
-curl -s http://localhost:8085/metrics | grep oidc_challenge_latency_seconds
+curl -s http://localhost:8080/metrics | grep oidc_challenge_latency_seconds
 ```
 
 Latency histograms and counters confirm the metrics endpoint is wired for

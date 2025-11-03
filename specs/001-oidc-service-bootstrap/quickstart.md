@@ -35,6 +35,8 @@ Override configuration using environment variables, e.g.
 ```bash
 OIDC_HYDRA_ADMIN_URL=http://localhost:4445 \
 OIDC_KRATOS_PUBLIC_URL=http://localhost:4433 \
+OIDC_KRATOS_BROWSER_URL=http://localhost:4433 \
+OIDC_LOGIN_RETURN_BASE_URL=http://localhost:8080/oidc/login \
 OIDC_SESSION_COOKIE=ory_kratos_session \
 OIDC_MAINTENANCE_SHARED_SECRET=dev-secret \
 go run .
@@ -55,7 +57,7 @@ echo "$LOGIN_CHALLENGE"
 
 ```bash
 curl -s \
-  -X POST "http://localhost:8080/v1/oidc/login" \
+  -X POST "http://localhost:8080/oidc/login" \
   -H "Content-Type: application/json" \
   -H "Cookie: ory_kratos_session=$(grep ory_kratos_session /tmp/kratos.cookie | awk '{print $7}')" \
   -d "{\"challengeId\": \"$LOGIN_CHALLENGE\", \"accept\": true}" | jq

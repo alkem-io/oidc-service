@@ -39,3 +39,4 @@ go.sum.tmp
 
 # Environment files
 .env*
+/.kilocode/

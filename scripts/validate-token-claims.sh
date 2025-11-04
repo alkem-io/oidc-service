@@ -8,6 +8,8 @@ set -euo pipefail
 HYDRA_PUBLIC_URL="${HYDRA_PUBLIC_URL:-http://localhost:4444}"
 SYNAPSE_PUBLIC_URL="${SYNAPSE_PUBLIC_URL:-http://localhost:8008}"
 SYNAPSE_OIDC_CLIENT_ID="${SYNAPSE_OIDC_CLIENT_ID:-synapse}"
+# Optional: provide when client requires authentication at token endpoint
+SYNAPSE_OIDC_CLIENT_SECRET="${SYNAPSE_OIDC_CLIENT_SECRET:-}"
 OIDC_SERVICE_URL="${OIDC_SERVICE_URL:-http://localhost:8080}"
 KRATOS_ADMIN_URL="${KRATOS_ADMIN_URL:-http://localhost:4434}"
 
@@ -36,6 +38,26 @@ error() {
 }
 
 # Utility functions
+# Portable base64 decode helper (supports macOS and GNU coreutils)
+_base64_decode() {
+    if base64 --help 2>&1 | grep -q -- '--decode'; then
+        base64 --decode
+    else
+        base64 -D
+    fi
+}
+
+# Decode a base64url string (JWT parts) into JSON/text
+b64url_decode() {
+    local input="$1"
+    # translate URL-safe chars
+    input="$(echo -n "$input" | tr '_-' '/+')"
+    # pad to multiple of 4
+    local mod=$(( ${#input} % 4 ))
+    if [ $mod -eq 2 ]; then input+="=="; elif [ $mod -eq 3 ]; then input+="="; elif [ $mod -eq 1 ]; then input+="==="; fi
+    echo -n "$input" | _base64_decode 2>/dev/null || return 1
+}
+
 check_service() {
     local service_name="$1"
     local url="$2"
@@ -91,12 +113,12 @@ EOF
         log "Setting email as verified for $scenario"
         curl -s -X PUT "$KRATOS_ADMIN_URL/admin/identities/$identity_id/credentials/password" \
             -H "Content-Type: application/json" \
-            -d '{"password": "test-password"}'
-            
+            -d '{"password": "test-password"}' >/dev/null
+
         # Create verified email address
         curl -s -X POST "$KRATOS_ADMIN_URL/admin/identities/$identity_id/addresses" \
             -H "Content-Type: application/json" \
-            -d "{\"value\": \"$email\", \"verified\": true, \"via\": \"email\"}"
+            -d "{\"value\": \"$email\", \"verified\": true, \"via\": \"email\"}" >/dev/null
     fi
     
     echo "$identity_id"
@@ -162,7 +184,7 @@ EOF
         oidc_response=$(curl -s -i -b "ory_kratos_session=$session_token" \
             "$OIDC_SERVICE_URL/v1/oidc/login?login_challenge=$login_challenge")
     else
-        # Fallback: This would require mocking or using identity ID directly
+        # Fallback path: identity lookup only confirms redirect; cannot validate claims
         warning "Session creation failed for $scenario - skipping detailed token validation"
         return 0
     fi
@@ -171,21 +193,80 @@ EOF
     if echo "$oidc_response" | grep -q "HTTP/1.1 302"; then
         success "OIDC service successfully processed challenge for $scenario"
         
-        # Extract redirect URL to get authorization code
-        local redirect_url=$(echo "$oidc_response" | grep -i "location:" | cut -d' ' -f2- | tr -d '\r\n')
-        
-        if [ -n "$redirect_url" ]; then
-            log "Redirect URL obtained for $scenario"
-            
-            # In a full integration test, we would:
-            # 1. Follow the redirect to get authorization code
-            # 2. Exchange code for tokens 
-            # 3. Decode and validate token claims
-            # For this validation, we confirm the flow works
-            success "Token claims flow validated for $scenario"
-        else
-            warning "No redirect URL found for $scenario"
+        # Extract redirect URL to get authorization code (follow to final URL)
+        local redirect_url=$(echo "$oidc_response" | grep -i "^Location:" | cut -d' ' -f2- | tr -d '\r\n')
+        if [ -z "$redirect_url" ]; then
+            error "No redirect URL found for $scenario"
         fi
+        log "Redirect URL obtained for $scenario"
+
+        # Follow redirects to final URL and capture it (should contain code=)
+        local final_url=$(curl -s -o /dev/null -w '%{url_effective}' -L "$redirect_url")
+        if ! echo "$final_url" | grep -q 'code='; then
+            error "Final redirect URL does not contain authorization code for $scenario"
+        fi
+        local auth_code=$(echo "$final_url" | sed -n 's/.*[?&]code=\([^&]*\).*/\1/p')
+        if [ -z "$auth_code" ]; then
+            error "Failed to extract authorization code for $scenario"
+        fi
+
+        # Exchange authorization code for tokens
+        log "Exchanging authorization code for tokens"
+        local token_url="$HYDRA_PUBLIC_URL/oauth2/token"
+        local form="grant_type=authorization_code&code=${auth_code}&redirect_uri=${SYNAPSE_PUBLIC_URL}/_synapse/client/oidc/callback"
+        local token_response
+        if [ -n "${SYNAPSE_OIDC_CLIENT_SECRET}" ]; then
+            token_response=$(curl -s -X POST "$token_url" \
+                -H "Content-Type: application/x-www-form-urlencoded" \
+                -u "$SYNAPSE_OIDC_CLIENT_ID:$SYNAPSE_OIDC_CLIENT_SECRET" \
+                -d "$form")
+        else
+            token_response=$(curl -s -X POST "$token_url" \
+                -H "Content-Type: application/x-www-form-urlencoded" \
+                -d "$form&client_id=$SYNAPSE_OIDC_CLIENT_ID")
+        fi
+
+        local id_token=$(echo "$token_response" | jq -r '.id_token // empty')
+        if [ -z "$id_token" ] || [ "$id_token" = "null" ]; then
+            error "Token response missing id_token for $scenario: $(echo "$token_response" | jq -c '.')"
+        fi
+
+        # Decode JWT payload (second part)
+        local jwt_payload_b64=$(echo "$id_token" | cut -d'.' -f2)
+        if [ -z "$jwt_payload_b64" ]; then
+            error "Invalid id_token format for $scenario"
+        fi
+        local jwt_payload_json
+        if ! jwt_payload_json=$(b64url_decode "$jwt_payload_b64"); then
+            error "Failed to decode id_token payload for $scenario"
+        fi
+
+        # Extract claims as strings for comparison
+        local claim_given_name=$(echo "$jwt_payload_json" | jq -r '.given_name // ""')
+        local claim_family_name=$(echo "$jwt_payload_json" | jq -r '.family_name // ""')
+        local claim_email_verified=$(echo "$jwt_payload_json" | jq -r '.email_verified | tostring')
+        local claim_accepted_terms=$(echo "$jwt_payload_json" | jq -r '.accepted_terms | tostring')
+
+        # Normalize expected booleans to lowercase
+        local exp_email_verified=$(echo "$expected_email_verified" | tr 'A-Z' 'a-z')
+        local exp_accepted_terms=$(echo "$expected_accepted_terms" | tr 'A-Z' 'a-z')
+
+        # Compare and report
+        local mismatch=0
+        if [ "$claim_given_name" != "$expected_given_name" ]; then
+            error "given_name mismatch for $scenario: expected '$expected_given_name' got '$claim_given_name'"
+        fi
+        if [ "$claim_family_name" != "$expected_family_name" ]; then
+            error "family_name mismatch for $scenario: expected '$expected_family_name' got '$claim_family_name'"
+        fi
+        if [ "$claim_email_verified" != "$exp_email_verified" ]; then
+            error "email_verified mismatch for $scenario: expected '$exp_email_verified' got '$claim_email_verified'"
+        fi
+        if [ "$claim_accepted_terms" != "$exp_accepted_terms" ]; then
+            error "accepted_terms mismatch for $scenario: expected '$exp_accepted_terms' got '$claim_accepted_terms'"
+        fi
+
+        success "Token claims validated for $scenario (given_name, family_name, email_verified, accepted_terms)"
     else
         local status=$(echo "$oidc_response" | head -1 | cut -d' ' -f2)
         error "OIDC service returned status $status for $scenario"
@@ -282,3 +363,4 @@ EOF
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     main "$@"
 fi
+

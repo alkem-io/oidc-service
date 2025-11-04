@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/mail"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	kratosclient "github.com/ory/client-go"
@@ -380,12 +381,9 @@ func isValidUTF8String(s string) bool {
 
 // isAllowedRune checks if a rune is allowed in name fields.
 func isAllowedRune(r rune) bool {
-	// Allow letters, numbers, spaces, hyphens, apostrophes, and periods
-	return (r >= 'a' && r <= 'z') ||
-		(r >= 'A' && r <= 'Z') ||
+	// Allow Unicode letters for international names via unicode.IsLetter,
+	// and keep existing allowances for digits and select punctuation.
+	return unicode.IsLetter(r) ||
 		(r >= '0' && r <= '9') ||
-		r == ' ' || r == '-' || r == '\'' || r == '.' ||
-		// Allow Unicode letters for international names
-		(r >= 0x00C0 && r <= 0x024F) || // Latin Extended-A and Extended-B
-		(r >= 0x1E00 && r <= 0x1EFF) // Latin Extended Additional
+		r == ' ' || r == '-' || r == '\'' || r == '.'
 }

@@ -16,7 +16,10 @@ func TestNewLoggerValidLevel(t *testing.T) {
 	logger, err := NewLogger("debug")
 	require.NoError(t, err)
 	require.NotNil(t, logger)
-	logger.Sync() // flush buffers
+	// flush buffers; Sync can return benign errors on non-file sinks, so just log them
+	if err := logger.Sync(); err != nil {
+		t.Logf("logger.Sync() returned: %v", err)
+	}
 }
 
 func TestNewRegistry(t *testing.T) {

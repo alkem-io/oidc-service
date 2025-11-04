@@ -112,24 +112,26 @@ func TestExtractEmailVerifiedClaimUnit(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// Note: This test requires access to the extractEmailVerifiedClaim function
-			// In a real implementation, this function should be exported or
-			// we should have a test helper that allows testing internal functions
+		t.Run(
+			tc.name, func(t *testing.T) {
+				// Note: This test requires access to the extractEmailVerifiedClaim function
+				// In a real implementation, this function should be exported or
+				// we should have a test helper that allows testing internal functions
 
-			// For now, we're documenting the expected behavior
-			// TODO: Implement actual function call once it's accessible
+				// For now, we're documenting the expected behavior
+				// TODO: Implement actual function call once it's accessible
 
-			result := challenge.TestExtractEmailVerifiedClaim(tc.identity)
+				result := challenge.TestExtractEmailVerifiedClaim(tc.identity)
 
-			if tc.expected == nil && result != nil {
-				t.Errorf("%s: expected nil, got %v", tc.description, *result)
-			} else if tc.expected != nil && result == nil {
-				t.Errorf("%s: expected %v, got nil", tc.description, *tc.expected)
-			} else if tc.expected != nil && result != nil && *tc.expected != *result {
-				t.Errorf("%s: expected %v, got %v", tc.description, *tc.expected, *result)
-			}
-		})
+				if tc.expected == nil && result != nil {
+					t.Errorf("%s: expected nil, got %v", tc.description, *result)
+				} else if tc.expected != nil && result == nil {
+					t.Errorf("%s: expected %v, got nil", tc.description, *tc.expected)
+				} else if tc.expected != nil && result != nil && *tc.expected != *result {
+					t.Errorf("%s: expected %v, got %v", tc.description, *tc.expected, *result)
+				}
+			},
+		)
 	}
 }
 
@@ -212,28 +214,26 @@ func TestExtractAcceptedTermsClaimUnit(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// Note: This test requires access to the extractAcceptedTermsClaim function
-			// TODO: Implement actual function call once it's accessible
+		t.Run(
+			tc.name, func(t *testing.T) {
+				// Note: This test requires access to the extractAcceptedTermsClaim function
+				// TODO: Implement actual function call once it's accessible
 
-			result := challenge.TestExtractAcceptedTermsClaim(tc.traits)
+				result := challenge.TestExtractAcceptedTermsClaim(tc.traits)
 
-			if tc.expected == nil && result != nil {
-				t.Errorf("%s: expected nil, got %v", tc.description, *result)
-			} else if tc.expected != nil && result == nil {
-				t.Errorf("%s: expected %v, got nil", tc.description, *tc.expected)
-			} else if tc.expected != nil && result != nil && *tc.expected != *result {
-				t.Errorf("%s: expected %v, got %v", tc.description, *tc.expected, *result)
-			}
-		})
+				if tc.expected == nil && result != nil {
+					t.Errorf("%s: expected nil, got %v", tc.description, *result)
+				} else if tc.expected != nil && result == nil {
+					t.Errorf("%s: expected %v, got nil", tc.description, *tc.expected)
+				} else if tc.expected != nil && result != nil && *tc.expected != *result {
+					t.Errorf("%s: expected %v, got %v", tc.description, *tc.expected, *result)
+				}
+			},
+		)
 	}
 }
 
 // Helper functions for creating pointers
 func boolPtr(b bool) *bool {
 	return &b
-}
-
-func stringPtr(s string) *string {
-	return &s
 }

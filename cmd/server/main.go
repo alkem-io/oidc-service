@@ -84,18 +84,22 @@ func main() {
 		HydraProbe:       hydraProbe,
 		KratosProbe:      kratosProbe,
 		ReadinessTimeout: cfg.ReadinessTimeout,
+		Logger:           challenge.NewZapLoggerAdapter(logger),
+		Metrics:          metrics,
 	})
 	if err != nil {
 		fatal("configure challenge service", err)
 	}
 
 	handler := server.NewRouter(server.Options{
-		Logger:          logger,
-		Maintenance:     maint,
-		Challenge:       challengeService,
-		Metrics:         metrics,
-		SessionResolver: sessionResolver,
-		SessionCookie:   cfg.KratosSessionCookie,
+		Logger:             logger,
+		Maintenance:        maint,
+		Challenge:          challengeService,
+		Metrics:            metrics,
+		SessionResolver:    sessionResolver,
+		SessionCookie:      cfg.KratosSessionCookie,
+		KratosBrowserURL:   cfg.KratosBrowserURL,
+		LoginReturnBaseURL: cfg.LoginReturnBaseURL,
 	})
 
 	srv := &http.Server{

@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/mail"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	kratosclient "github.com/ory/client-go"
 )
@@ -126,6 +128,7 @@ func buildIdentityProfile(identity *kratosclient.Identity) (*IdentityProfile, er
 		Email:       email,
 		DisplayName: displayName,
 		Traits:      cloneMap(traits),
+		TokenClaims: extractTokenClaims(identity),
 	}
 
 	if meta := identity.GetMetadataPublic(); meta != nil {
@@ -218,4 +221,169 @@ func dedupe(values []string) []string {
 		result = append(result, value)
 	}
 	return result
+}
+
+// extractTokenClaims builds TokenClaims from Kratos identity data.
+func extractTokenClaims(identity *kratosclient.Identity) *TokenClaims {
+	if identity == nil {
+		return &TokenClaims{}
+	}
+
+	traits, ok := identity.GetTraits().(map[string]interface{})
+	if !ok {
+		return &TokenClaims{}
+	}
+
+	claims := &TokenClaims{}
+
+	// Extract name claims
+	if givenName := extractGivenNameClaim(traits); givenName != "" {
+		claims.GivenName = &givenName
+	}
+	if familyName := extractFamilyNameClaim(traits); familyName != "" {
+		claims.FamilyName = &familyName
+	}
+
+	// Extract compliance claims
+	if emailVerified := extractEmailVerifiedClaim(identity); emailVerified != nil {
+		claims.EmailVerified = emailVerified
+	}
+	if acceptedTerms := extractAcceptedTermsClaim(traits); acceptedTerms != nil {
+		claims.AcceptedTerms = acceptedTerms
+	}
+
+	return claims
+}
+
+// extractGivenNameClaim extracts and validates the given name from traits.name.first.
+func extractGivenNameClaim(traits map[string]interface{}) string {
+	return extractNameFromTraits(traits, "first")
+}
+
+// extractFamilyNameClaim extracts and validates the family name from traits.name.last.
+func extractFamilyNameClaim(traits map[string]interface{}) string {
+	return extractNameFromTraits(traits, "last")
+}
+
+// extractNameFromTraits is a helper function to extract and validate name fields consistently.
+func extractNameFromTraits(traits map[string]interface{}, field string) string {
+	if traits == nil {
+		return ""
+	}
+
+	nameValue, ok := traits["name"]
+	if !ok {
+		return ""
+	}
+
+	nameMap, ok := nameValue.(map[string]any)
+	if !ok {
+		return ""
+	}
+
+	nameField := extractString(nameMap[field])
+	if nameField == "" {
+		return ""
+	}
+
+	// Validate UTF-8 and reasonable length
+	if !isValidUTF8String(nameField) || len(nameField) > 255 {
+		return ""
+	}
+
+	return nameField
+}
+
+// extractEmailVerifiedClaim determines email verification status from verifiable_addresses.
+func extractEmailVerifiedClaim(identity *kratosclient.Identity) *bool {
+	if identity == nil {
+		return nil
+	}
+
+	addresses := identity.GetVerifiableAddresses()
+	if len(addresses) == 0 {
+		return nil
+	}
+
+	// Filter to email addresses only and check verification status
+	hasEmailAddresses := false
+	for _, addr := range addresses {
+		// Only consider email addresses (skip SMS, etc.)
+		if addr.GetVia() == "email" {
+			hasEmailAddresses = true
+			if addr.GetVerified() {
+				verified := true
+				return &verified
+			}
+		}
+	}
+
+	// If no email addresses found, omit the claim
+	if !hasEmailAddresses {
+		return nil
+	}
+
+	// If we have email addresses but none are verified
+	verified := false
+	return &verified
+}
+
+// extractAcceptedTermsClaim extracts the boolean terms acceptance from traits.accepted_terms.
+func extractAcceptedTermsClaim(traits map[string]interface{}) *bool {
+	if traits == nil {
+		return nil
+	}
+
+	termsValue, ok := traits["accepted_terms"]
+	if !ok {
+		return nil
+	}
+
+	switch v := termsValue.(type) {
+	case bool:
+		return &v
+	case string:
+		// Handle string representations of boolean
+		lower := strings.ToLower(strings.TrimSpace(v))
+		switch lower {
+		case "true", "1", "yes":
+			result := true
+			return &result
+		case "false", "0", "no":
+			result := false
+			return &result
+		}
+	}
+
+	return nil
+}
+
+// isValidUTF8String checks if a string is valid UTF-8 and contains printable characters.
+func isValidUTF8String(s string) bool {
+	if s == "" {
+		return false
+	}
+
+	// Check if it's valid UTF-8
+	if !utf8.ValidString(s) {
+		return false
+	}
+
+	// Check if all runes are allowed
+	for _, r := range s {
+		if !isAllowedRune(r) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// isAllowedRune checks if a rune is allowed in name fields.
+func isAllowedRune(r rune) bool {
+	// Allow Unicode letters for international names via unicode.IsLetter,
+	// and keep existing allowances for digits and select punctuation.
+	return unicode.IsLetter(r) ||
+		(r >= '0' && r <= '9') ||
+		r == ' ' || r == '-' || r == '\'' || r == '.'
 }

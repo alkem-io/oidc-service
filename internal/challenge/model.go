@@ -36,6 +36,50 @@ type IdentityProfile struct {
 	DisplayName  string
 	MatrixUserID string
 	Traits       map[string]any
+	TokenClaims  *TokenClaims
+}
+
+// TokenClaims holds the enhanced claim fields to be included in tokens.
+type TokenClaims struct {
+	GivenName     *string `json:"given_name,omitempty"`
+	FamilyName    *string `json:"family_name,omitempty"`
+	EmailVerified *bool   `json:"email_verified,omitempty"`
+	AcceptedTerms *bool   `json:"accepted_terms,omitempty"`
+}
+
+// IsEmpty returns true if no claims are set.
+func (tc *TokenClaims) IsEmpty() bool {
+	return tc.GivenName == nil && tc.FamilyName == nil && tc.EmailVerified == nil && tc.AcceptedTerms == nil
+}
+
+// ToAccessTokenMap converts claims appropriate for Access tokens to a map.
+func (tc *TokenClaims) ToAccessTokenMap() map[string]any {
+	claims := make(map[string]any)
+	if tc.GivenName != nil {
+		claims["given_name"] = *tc.GivenName
+	}
+	if tc.FamilyName != nil {
+		claims["family_name"] = *tc.FamilyName
+	}
+	return claims
+}
+
+// ToIDTokenMap converts claims appropriate for ID tokens to a map.
+func (tc *TokenClaims) ToIDTokenMap() map[string]any {
+	claims := make(map[string]any)
+	if tc.GivenName != nil {
+		claims["given_name"] = *tc.GivenName
+	}
+	if tc.FamilyName != nil {
+		claims["family_name"] = *tc.FamilyName
+	}
+	if tc.EmailVerified != nil {
+		claims["email_verified"] = *tc.EmailVerified
+	}
+	if tc.AcceptedTerms != nil {
+		claims["accepted_terms"] = *tc.AcceptedTerms
+	}
+	return claims
 }
 
 // ReadinessState reflects upstream availability for health checks.

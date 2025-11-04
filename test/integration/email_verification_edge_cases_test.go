@@ -267,6 +267,11 @@ func TestEmailVerificationEdgeCases(t *testing.T) {
 				// Call the actual extraction helper to get token claims
 				claims := challenge.TestExtractTokenClaims(identity)
 
+				// Defensive check to avoid nil-dereference on claims
+				if claims == nil {
+					t.Fatalf("%s: claims extraction returned nil (unexpected)", tc.description)
+				}
+
 				if tc.shouldOmit {
 					if claims.EmailVerified != nil {
 						t.Errorf(
@@ -406,6 +411,11 @@ func TestAcceptedTermsEdgeCases(t *testing.T) {
 				identity := buildIdentityFromJSON(t, tc.identityJSON)
 
 				claims := challenge.TestExtractTokenClaims(identity)
+
+				// Defensive check to avoid nil-dereference on claims
+				if claims == nil {
+					t.Fatalf("%s: claims extraction returned nil (unexpected)", tc.description)
+				}
 
 				if tc.shouldOmit {
 					if claims.AcceptedTerms != nil {

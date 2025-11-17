@@ -1,6 +1,6 @@
 # Quickstart: Alkemio User ID Token Claim
 
-This feature adds an `alkemio_user_id` claim to tokens issued by oidc-service when a corresponding Alkemio user mapping exists for the users Kratos identity.
+This feature adds an `alkemio_user_id` claim to tokens issued by oidc-service when a corresponding Alkemio user mapping exists for the user's Kratos identity.
 
 ## Prerequisites
 

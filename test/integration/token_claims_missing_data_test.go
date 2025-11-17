@@ -1,124 +1,219 @@
 package integration_test
 
 import (
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"github.com/alkem-io/oidc-service/internal/config"
-	"github.com/alkem-io/oidc-service/internal/maintenance"
-	"github.com/alkem-io/oidc-service/internal/server"
-	"go.uber.org/zap"
+	testsupport "github.com/alkem-io/oidc-service/test/support"
 )
 
-// TestTokenClaimsMissingData tests that token generation handles missing
-// Kratos identity traits gracefully by omitting the corresponding claims.
+// TestTokenClaimsMissingData ensures missing name traits are omitted from token payloads.
 func TestTokenClaimsMissingData(t *testing.T) {
-	router := server.NewRouter(server.Options{
-		Logger:      zap.NewNop(),
-		Maintenance: maintenance.NewState(config.MaintenanceState{}),
-	})
-
-	// Use a stub consent challenge with incomplete identity data
-	req := httptest.NewRequest(http.MethodGet, "/v1/oidc/consent?consent_challenge=missing-traits", nil)
-	rec := httptest.NewRecorder()
-
-	router.ServeHTTP(rec, req)
-
-	// Should succeed despite missing data (graceful degradation)
-	if rec.Code != http.StatusFound {
-		t.Fatalf("expected status %d for missing traits consent, got %d", http.StatusFound, rec.Code)
-	}
-
-	if loc := rec.Header().Get("Location"); loc == "" {
-		t.Fatal("expected Location header on successful consent with missing traits")
-	}
-
-	// TODO: In a full implementation, we would validate that:
-	// 1. Tokens are generated successfully despite missing name data
-	// 2. Missing claims are omitted (not included as null/empty)
-	// 3. Available claims are still included correctly
-	// This ensures backward compatibility and graceful degradation
-}
-
-// TestTokenClaimsInvalidData tests handling of invalid/malformed identity data
-// during token claim extraction.
-func TestTokenClaimsInvalidData(t *testing.T) {
-	router := server.NewRouter(server.Options{
-		Logger:      zap.NewNop(),
-		Maintenance: maintenance.NewState(config.MaintenanceState{}),
-	})
-
-	// Use a stub consent challenge with invalid/malformed identity data
-	req := httptest.NewRequest(http.MethodGet, "/v1/oidc/consent?consent_challenge=invalid-traits", nil)
-	rec := httptest.NewRecorder()
-
-	router.ServeHTTP(rec, req)
-
-	// Should handle invalid data gracefully
-	if rec.Code != http.StatusFound {
-		t.Fatalf("expected status %d for invalid traits consent, got %d", http.StatusFound, rec.Code)
-	}
-
-	if loc := rec.Header().Get("Location"); loc == "" {
-		t.Fatal("expected Location header on successful consent with invalid traits")
-	}
-
-	// TODO: Validate that invalid data is safely ignored and doesn't break token generation
-}
-
-// TestTokenClaimsPartialMissingData tests various scenarios of partially missing
-// identity data (e.g., first name present but last name missing).
-func TestTokenClaimsPartialMissingData(t *testing.T) {
 	testCases := []struct {
-		name        string
-		challengeID string
-		description string
+		name         string
+		identityJSON string
+		description  string
 	}{
 		{
-			name:        "MissingFirstName",
-			challengeID: "missing-first-name",
-			description: "Should handle missing first name gracefully",
+			name: "NoNameObject",
+			identityJSON: `{
+				"traits": {
+					"email": "user@example.com"
+				}
+			}`,
+			description: "Traits without name object should omit name claims",
 		},
 		{
-			name:        "MissingLastName",
-			challengeID: "missing-last-name",
-			description: "Should handle missing last name gracefully",
+			name: "EmptyNameObject",
+			identityJSON: `{
+				"traits": {
+					"name": {}
+				}
+			}`,
+			description: "Empty name object should not emit claims",
 		},
 		{
-			name:        "EmptyNameObject",
-			challengeID: "empty-name-object",
-			description: "Should handle empty name object gracefully",
-		},
-		{
-			name:        "NullNameFields",
-			challengeID: "null-name-fields",
-			description: "Should handle null name fields gracefully",
+			name: "NullNameFields",
+			identityJSON: `{
+				"traits": {
+					"name": {
+						"first": null,
+						"last": null
+					}
+				}
+			}`,
+			description: "Null name fields should be ignored",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			router := server.NewRouter(server.Options{
-				Logger:      zap.NewNop(),
-				Maintenance: maintenance.NewState(config.MaintenanceState{}),
-			})
+			claims := testsupport.ExtractTokenClaimsFromJSON(t, tc.identityJSON)
+			idToken := claims.ToIDTokenMap()
 
-			req := httptest.NewRequest(http.MethodGet, "/v1/oidc/consent?consent_challenge="+tc.challengeID, nil)
-			rec := httptest.NewRecorder()
-
-			router.ServeHTTP(rec, req)
-
-			// Should handle partial data gracefully
-			if rec.Code != http.StatusFound {
-				t.Fatalf("%s: expected status %d, got %d", tc.description, http.StatusFound, rec.Code)
+			if claims.GivenName != nil {
+				t.Fatalf("%s: expected given_name to be omitted, got %q", tc.description, *claims.GivenName)
 			}
-
-			if loc := rec.Header().Get("Location"); loc == "" {
-				t.Fatalf("%s: expected Location header", tc.description)
+			if claims.FamilyName != nil {
+				t.Fatalf("%s: expected family_name to be omitted, got %q", tc.description, *claims.FamilyName)
 			}
-
-			// TODO: Validate specific claim presence/absence based on available data
+			if _, ok := idToken["given_name"]; ok {
+				t.Fatalf("%s: given_name leaked into ID token map", tc.description)
+			}
+			if _, ok := idToken["family_name"]; ok {
+				t.Fatalf("%s: family_name leaked into ID token map", tc.description)
+			}
 		})
 	}
+}
+
+// TestTokenClaimsInvalidData ensures malformed name data is sanitized.
+func TestTokenClaimsInvalidData(t *testing.T) {
+	testCases := []struct {
+		name         string
+		identityJSON string
+		description  string
+	}{
+		{
+			name: "NameAsString",
+			identityJSON: `{
+				"traits": {
+					"name": "not-an-object"
+				}
+			}`,
+			description: "Name value as string should be ignored",
+		},
+		{
+			name: "NumericFields",
+			identityJSON: `{
+				"traits": {
+					"name": {
+						"first": 123,
+						"last": 456
+					}
+				}
+			}`,
+			description: "Numeric name fields should be ignored",
+		},
+		{
+			name: "InvalidCharacters",
+			identityJSON: `{
+				"traits": {
+					"name": {
+						"first": "\u0001control",
+						"last": "Doe"
+					}
+				}
+			}`,
+			description: "Disallowed characters should drop the field",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			claims := testsupport.ExtractTokenClaimsFromJSON(t, tc.identityJSON)
+
+			if claims.GivenName != nil {
+				t.Fatalf("%s: expected given_name omission, got %q", tc.description, *claims.GivenName)
+			}
+			// last name may pass for invalid characters test; ensure enforcement only when applicable
+			if tc.name != "InvalidCharacters" && claims.FamilyName != nil {
+				t.Fatalf("%s: expected family_name omission, got %q", tc.description, *claims.FamilyName)
+			}
+		})
+	}
+}
+
+// TestTokenClaimsPartialMissingData ensures partial name data still surfaces valid claims.
+func TestTokenClaimsPartialMissingData(t *testing.T) {
+	testCases := []struct {
+		name          string
+		identityJSON  string
+		expectedGiven *string
+		expectedLast  *string
+		description   string
+	}{
+		{
+			name: "FirstNameOnly",
+			identityJSON: `{
+				"traits": {
+					"name": {
+						"first": "Alice"
+					}
+				}
+			}`,
+			expectedGiven: stringPtr("Alice"),
+			expectedLast:  nil,
+			description:   "Only first name should populate given_name",
+		},
+		{
+			name: "LastNameOnly",
+			identityJSON: `{
+				"traits": {
+					"name": {
+						"last": "Smith"
+					}
+				}
+			}`,
+			expectedGiven: nil,
+			expectedLast:  stringPtr("Smith"),
+			description:   "Only last name should populate family_name",
+		},
+		{
+			name: "UnicodeNames",
+			identityJSON: `{
+				"traits": {
+					"name": {
+						"first": "Zoë",
+						"last": "García"
+					}
+				}
+			}`,
+			expectedGiven: stringPtr("Zoë"),
+			expectedLast:  stringPtr("García"),
+			description:   "UTF-8 names should be preserved",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			claims := testsupport.ExtractTokenClaimsFromJSON(t, tc.identityJSON)
+			idToken := claims.ToIDTokenMap()
+
+			if tc.expectedGiven == nil {
+				if claims.GivenName != nil {
+					t.Fatalf("%s: unexpected given_name %q", tc.description, *claims.GivenName)
+				}
+				if _, ok := idToken["given_name"]; ok {
+					t.Fatalf("%s: given_name should be absent in ID token", tc.description)
+				}
+			} else {
+				if claims.GivenName == nil || *claims.GivenName != *tc.expectedGiven {
+					t.Fatalf("%s: expected given_name=%q, got %v", tc.description, *tc.expectedGiven, claims.GivenName)
+				}
+				if idVal, ok := idToken["given_name"].(string); !ok || idVal != *tc.expectedGiven {
+					t.Fatalf("%s: ID token given_name mismatch", tc.description)
+				}
+			}
+
+			if tc.expectedLast == nil {
+				if claims.FamilyName != nil {
+					t.Fatalf("%s: unexpected family_name %q", tc.description, *claims.FamilyName)
+				}
+				if _, ok := idToken["family_name"]; ok {
+					t.Fatalf("%s: family_name should be absent in ID token", tc.description)
+				}
+			} else {
+				if claims.FamilyName == nil || *claims.FamilyName != *tc.expectedLast {
+					t.Fatalf("%s: expected family_name=%q, got %v", tc.description, *tc.expectedLast, claims.FamilyName)
+				}
+				if idVal, ok := idToken["family_name"].(string); !ok || idVal != *tc.expectedLast {
+					t.Fatalf("%s: ID token family_name mismatch", tc.description)
+				}
+			}
+		})
+	}
+}
+
+func stringPtr(val string) *string {
+	return &val
 }

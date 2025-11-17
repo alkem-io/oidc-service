@@ -87,8 +87,13 @@ func main() {
 		fatal("configure alkemio identity resolver", err)
 	}
 
+	hydraOAuthClient, err := challenge.NewHydraOAuth2Client(hydraClient.Admin().OAuth2API)
+	if err != nil {
+		fatal("configure hydra oauth client", err)
+	}
+
 	challengeService, err := challenge.NewService(challenge.Options{
-		Hydra:            challenge.NewHydraOAuth2Client(hydraClient.Admin().OAuth2API),
+		Hydra:            hydraOAuthClient,
 		Identity:         challenge.NewIdentityMapper(kratosClient.Admin().IdentityAPI),
 		Alkemio:          identityResolver,
 		HydraProbe:       hydraProbe,

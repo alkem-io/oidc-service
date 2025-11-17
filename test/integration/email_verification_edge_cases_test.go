@@ -1,49 +1,10 @@
 package integration_test
 
 import (
-	"encoding/json"
 	"testing"
 
-	kratosclient "github.com/ory/client-go"
-
-	"github.com/alkem-io/oidc-service/internal/challenge"
+	testsupport "github.com/alkem-io/oidc-service/test/support"
 )
-
-// helper: build a minimal kratos Identity from JSON without triggering strict required-field checks
-func buildIdentityFromJSON(t *testing.T, identityJSON string) *kratosclient.Identity {
-	t.Helper()
-	// Unmarshal only the fields we need using a minimal struct
-	type minimal struct {
-		Traits              map[string]interface{}   `json:"traits"`
-		VerifiableAddresses []map[string]interface{} `json:"verifiable_addresses"`
-	}
-	var m minimal
-	if err := json.Unmarshal([]byte(identityJSON), &m); err != nil {
-		t.Fatalf("Failed to parse identity JSON: %v", err)
-	}
-	id := &kratosclient.Identity{}
-	if m.Traits != nil {
-		id.Traits = m.Traits
-	}
-	if len(m.VerifiableAddresses) > 0 {
-		addrs := make([]kratosclient.VerifiableIdentityAddress, 0, len(m.VerifiableAddresses))
-		for _, v := range m.VerifiableAddresses {
-			addr := kratosclient.VerifiableIdentityAddress{}
-			if val, ok := v["value"].(string); ok {
-				addr.Value = val
-			}
-			if via, ok := v["via"].(string); ok {
-				addr.Via = via
-			}
-			if verified, ok := v["verified"].(bool); ok {
-				addr.Verified = verified
-			}
-			addrs = append(addrs, addr)
-		}
-		id.VerifiableAddresses = addrs
-	}
-	return id
-}
 
 // TestEmailVerificationEdgeCases tests edge cases in email verification claim extraction.
 func TestEmailVerificationEdgeCases(t *testing.T) {
@@ -261,16 +222,7 @@ func TestEmailVerificationEdgeCases(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(
 			tc.name, func(t *testing.T) {
-				// Build identity object from JSON (avoids strict required-field unmarshalling)
-				identity := buildIdentityFromJSON(t, tc.identityJSON)
-
-				// Call the actual extraction helper to get token claims
-				claims := challenge.TestExtractTokenClaims(identity)
-
-				// Defensive check to avoid nil-dereference on claims
-				if claims == nil {
-					t.Fatalf("%s: claims extraction returned nil (unexpected)", tc.description)
-				}
+				claims := testsupport.ExtractTokenClaimsFromJSON(t, tc.identityJSON)
 
 				if tc.shouldOmit {
 					if claims.EmailVerified != nil {
@@ -407,15 +359,7 @@ func TestAcceptedTermsEdgeCases(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(
 			tc.name, func(t *testing.T) {
-				// Build identity object from JSON
-				identity := buildIdentityFromJSON(t, tc.identityJSON)
-
-				claims := challenge.TestExtractTokenClaims(identity)
-
-				// Defensive check to avoid nil-dereference on claims
-				if claims == nil {
-					t.Fatalf("%s: claims extraction returned nil (unexpected)", tc.description)
-				}
+				claims := testsupport.ExtractTokenClaimsFromJSON(t, tc.identityJSON)
 
 				if tc.shouldOmit {
 					if claims.AcceptedTerms != nil {

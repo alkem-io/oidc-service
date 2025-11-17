@@ -11,6 +11,8 @@ import (
 
 	"github.com/google/uuid"
 	hydraAdmin "github.com/ory/hydra-client-go/v2"
+
+	"github.com/alkem-io/oidc-service/internal/alkemio"
 )
 
 const (
@@ -35,22 +37,22 @@ type IdentityFetcher interface {
 	Fetch(ctx context.Context, identityID string) (*IdentityProfile, error)
 }
 
-// TokenClaimsRecorder observes token claim generation metrics.
-type TokenClaimsRecorder interface {
-	ObserveTokenClaims(tokenType string, claimsCount int, hasEnhancedClaims bool)
+// AlkemioResolver resolves internal Alkemio user identifiers from Kratos identities.
+type AlkemioResolver interface {
+	Resolve(ctx context.Context, authenticationID string) (string, error)
 }
 
 // Options configures the challenge service orchestrator.
 type Options struct {
 	Hydra            HydraClient
 	Identity         IdentityFetcher
+	Alkemio          AlkemioResolver
 	RememberFor      time.Duration
 	Readiness        ReadinessState
 	HydraProbe       ReadinessProbe
 	KratosProbe      ReadinessProbe
 	ReadinessTimeout time.Duration
 	Logger           Logger
-	Metrics          TokenClaimsRecorder
 }
 
 // Logger defines the logging interface used by the challenge service.
@@ -72,13 +74,13 @@ func (noopLogger) Debug(string, ...interface{}) {}
 type service struct {
 	hydra             HydraClient
 	identity          IdentityFetcher
+	alkemio           AlkemioResolver
 	rememberFor       int64
 	readinessDefaults ReadinessState
 	hydraProbe        ReadinessProbe
 	kratosProbe       ReadinessProbe
 	readyTimeout      time.Duration
 	logger            Logger
-	metrics           TokenClaimsRecorder
 }
 
 // ReadinessProbe evaluates upstream availability for readiness reporting.
@@ -103,6 +105,9 @@ func NewService(opts Options) (Service, error) {
 	}
 	if opts.Identity == nil {
 		return nil, errors.New("identity fetcher is required")
+	}
+	if opts.Alkemio == nil {
+		return nil, errors.New("alkemio resolver is required")
 	}
 
 	remember := opts.RememberFor
@@ -137,13 +142,13 @@ func NewService(opts Options) (Service, error) {
 	return &service{
 		hydra:             opts.Hydra,
 		identity:          opts.Identity,
+		alkemio:           opts.Alkemio,
 		rememberFor:       int64(remember.Seconds()),
 		readinessDefaults: readiness,
 		hydraProbe:        opts.HydraProbe,
 		kratosProbe:       opts.KratosProbe,
 		readyTimeout:      timeout,
 		logger:            logger,
-		metrics:           opts.Metrics,
 	}, nil
 }
 
@@ -272,6 +277,10 @@ func (s *service) ResolveConsent(ctx context.Context, challengeID string) (*Reso
 	profile, err := s.identity.Fetch(ctx, identityID)
 	if err != nil {
 		return nil, mapIdentityError(challengeID, err)
+	}
+
+	if err := s.attachAlkemioClaim(ctx, challengeID, profile); err != nil {
+		return nil, err
 	}
 
 	payload := hydraAdmin.NewAcceptOAuth2ConsentRequest()
@@ -439,6 +448,64 @@ func mapIdentityHintError(challengeID string, err error) error {
 	return NewKratosFailureError(challengeID, err.Error())
 }
 
+func mapAlkemioError(challengeID string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, alkemio.ErrNotFound) {
+		return NewAlkemioIdentityMissingError(challengeID)
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return NewAlkemioResolutionError(challengeID, "identity resolution timed out")
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return NewAlkemioResolutionError(challengeID, "identity resolution timed out")
+	}
+	return NewAlkemioResolutionError(challengeID, err.Error())
+}
+
+func (s *service) attachAlkemioClaim(ctx context.Context, challengeID string, profile *IdentityProfile) error {
+	if s == nil || s.alkemio == nil {
+		return NewAlkemioResolutionError(challengeID, "identity resolver unavailable")
+	}
+	if profile == nil {
+		return NewAlkemioResolutionError(challengeID, "identity profile missing")
+	}
+
+	maskedIdentity := maskIdentityID(profile.ID)
+	if s.logger != nil {
+		s.logger.Debug("resolving alkemio user id",
+			"challenge_id", challengeID,
+			"identity_id", maskedIdentity,
+		)
+	}
+
+	userID, err := s.alkemio.Resolve(ctx, profile.ID)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Warn("failed to resolve alkemio user id",
+				"challenge_id", challengeID,
+				"identity_id", maskedIdentity,
+				"error_type", classifyAlkemioErrorType(err),
+				"error", err,
+			)
+		}
+		return mapAlkemioError(challengeID, err)
+	}
+
+	if s.logger != nil {
+		s.logger.Debug("resolved alkemio user id",
+			"challenge_id", challengeID,
+			"identity_id", maskedIdentity,
+		)
+	}
+
+	profile.TokenClaims = ensureTokenClaims(profile.TokenClaims)
+	profile.TokenClaims.AlkemioUserID = stringPointer(userID)
+	return nil
+}
+
 const identityContextKey = "identity_id"
 
 func buildLoginContext(profile *IdentityProfile) map[string]any {
@@ -475,27 +542,12 @@ func (s *service) buildIDTokenClaims(profile *IdentityProfile) map[string]any {
 		claims["matrix_user_id"] = profile.MatrixUserID
 	}
 
-	// Add enhanced token claims if available
-	enhancedClaimsMap := make(map[string]any)
+	var extraClaims map[string]any
 	if profile.TokenClaims != nil && !profile.TokenClaims.IsEmpty() {
-		enhancedClaimsMap = profile.TokenClaims.ToIDTokenMap()
-		for key, value := range enhancedClaimsMap {
-			claims[key] = value
-		}
-
-		if s.logger != nil {
-			s.logger.Debug("added enhanced claims to ID token",
-				"identity_id", profile.ID,
-				"claims_added", len(enhancedClaimsMap),
-			)
-		}
+		extraClaims = profile.TokenClaims.ToIDTokenMap()
 	}
 
-	// Record metrics for ID token claims
-	if s.metrics != nil {
-		s.metrics.ObserveTokenClaims("id_token", len(enhancedClaimsMap), len(enhancedClaimsMap) > 0)
-	}
-
+	s.appendEnhancedClaims("ID token", profile, claims, extraClaims)
 	return claims
 }
 
@@ -512,28 +564,44 @@ func (s *service) buildAccessTokenClaims(profile *IdentityProfile) map[string]an
 		claims["traits"] = cloneTraits(profile.Traits)
 	}
 
-	// Add enhanced token claims for Access tokens (name claims only)
-	enhancedClaimsMap := make(map[string]any)
+	var extraClaims map[string]any
 	if profile.TokenClaims != nil && !profile.TokenClaims.IsEmpty() {
-		enhancedClaimsMap = profile.TokenClaims.ToAccessTokenMap()
-		for key, value := range enhancedClaimsMap {
+		extraClaims = profile.TokenClaims.ToAccessTokenMap()
+	}
+
+	s.appendEnhancedClaims("access token", profile, claims, extraClaims)
+	return claims
+}
+
+func (s *service) appendEnhancedClaims(logLabel string, profile *IdentityProfile, claims map[string]any, extra map[string]any) {
+	count := len(extra)
+	if count > 0 {
+		for key, value := range extra {
 			claims[key] = value
 		}
 
 		if s.logger != nil {
-			s.logger.Debug("added enhanced claims to access token",
+			s.logger.Debug("added enhanced claims to "+logLabel,
 				"identity_id", profile.ID,
-				"claims_added", len(enhancedClaimsMap),
+				"claims_added", count,
 			)
 		}
 	}
+}
 
-	// Record metrics for access token claims
-	if s.metrics != nil {
-		s.metrics.ObserveTokenClaims("access_token", len(enhancedClaimsMap), len(enhancedClaimsMap) > 0)
+func ensureTokenClaims(claims *TokenClaims) *TokenClaims {
+	if claims == nil {
+		return &TokenClaims{}
 	}
-
 	return claims
+}
+
+func stringPointer(value string) *string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
 }
 
 func cloneTraits(src map[string]any) map[string]any {
@@ -655,4 +723,39 @@ func isKratosIdentityID(value string) bool {
 	}
 
 	return true
+}
+
+func classifyAlkemioErrorType(err error) string {
+	switch {
+	case err == nil:
+		return "none"
+	case errors.Is(err, alkemio.ErrNotFound):
+		return "not_found"
+	case isTimeoutError(err):
+		return "timeout"
+	default:
+		return "error"
+	}
+}
+
+func isTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
+}
+
+func maskIdentityID(identityID string) string {
+	identityID = strings.TrimSpace(identityID)
+	if identityID == "" {
+		return ""
+	}
+	if len(identityID) <= 8 {
+		return identityID
+	}
+	return identityID[:8] + "..."
 }

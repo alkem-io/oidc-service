@@ -12,7 +12,7 @@ Enhance OIDC token generation to include standardized user profile claims in bot
 ## Technical Context
 
 **Language/Version**: Go 1.25 (from copilot instructions and constitution)  
-**Primary Dependencies**: Chi router, Zap logging, Prometheus metrics, Hydra client, Kratos client  
+**Primary Dependencies**: Chi router, Zap logging, Hydra client, Kratos client  
 **Storage**: N/A (reads from existing Kratos identity system)  
 **Testing**: `go test ./...`, golangci-lint run (from copilot instructions)  
 **Target Platform**: Linux server (containerized backend service)  
@@ -29,7 +29,7 @@ Enhance OIDC token generation to include standardized user profile claims in bot
 ✅ **Domain-Oriented Packages First**: Token claim logic will live in `internal/challenge` as pure Go structs, following existing patterns  
 ✅ **Deterministic Configuration**: No new configuration needed, uses existing Kratos client configuration  
 ✅ **Secure External Integrations**: Leverages existing Kratos client with timeout and error handling  
-✅ **Operational Observability**: Will extend existing Zap logging and Prometheus metrics for token claim operations  
+✅ **Operational Observability**: Will extend existing Zap logging for token claim operations (Prometheus metrics were removed Nov 2025)  
 ✅ **Fail-Fast Maintenance Controls**: Existing maintenance mode will cover new functionality  
 ✅ **Test-Driven Delivery**: Will add contract tests for token claim validation and integration tests for error paths  
 ✅ **Reproducible Containers**: No changes to Docker build process required  
@@ -39,7 +39,7 @@ Enhance OIDC token generation to include standardized user profile claims in bot
 ✅ **Domain-Oriented Packages First**: Design confirms extension of `internal/challenge/identity_mapper.go` following existing patterns  
 ✅ **Deterministic Configuration**: No new config required, uses existing structured config pattern  
 ✅ **Secure External Integrations**: Design leverages existing Kratos client with proper error handling and no secret logging  
-✅ **Operational Observability**: Design includes structured logging for claim operations and metrics tracking  
+✅ **Operational Observability**: Design includes structured logging for claim operations; metrics requirement removed Nov 2025  
 ✅ **Fail-Fast Maintenance Controls**: Existing maintenance middleware covers new token generation paths  
 ✅ **Test-Driven Delivery**: Detailed contract test specifications in `/contracts/` and integration test scenarios defined  
 ✅ **Reproducible Containers**: No Docker changes needed, existing build pipeline remains valid  

@@ -3,6 +3,7 @@ package challenge
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -45,11 +46,12 @@ type TokenClaims struct {
 	FamilyName    *string `json:"family_name,omitempty"`
 	EmailVerified *bool   `json:"email_verified,omitempty"`
 	AcceptedTerms *bool   `json:"accepted_terms,omitempty"`
+	AlkemioUserID *string `json:"alkemio_user_id,omitempty"`
 }
 
 // IsEmpty returns true if no claims are set.
 func (tc *TokenClaims) IsEmpty() bool {
-	return tc.GivenName == nil && tc.FamilyName == nil && tc.EmailVerified == nil && tc.AcceptedTerms == nil
+	return tc.GivenName == nil && tc.FamilyName == nil && tc.EmailVerified == nil && tc.AcceptedTerms == nil && tc.AlkemioUserID == nil
 }
 
 // ToAccessTokenMap converts claims appropriate for Access tokens to a map.
@@ -60,6 +62,9 @@ func (tc *TokenClaims) ToAccessTokenMap() map[string]any {
 	}
 	if tc.FamilyName != nil {
 		claims["family_name"] = *tc.FamilyName
+	}
+	if tc.AlkemioUserID != nil {
+		claims["alkemio_user_id"] = *tc.AlkemioUserID
 	}
 	return claims
 }
@@ -78,6 +83,9 @@ func (tc *TokenClaims) ToIDTokenMap() map[string]any {
 	}
 	if tc.AcceptedTerms != nil {
 		claims["accepted_terms"] = *tc.AcceptedTerms
+	}
+	if tc.AlkemioUserID != nil {
+		claims["alkemio_user_id"] = *tc.AlkemioUserID
 	}
 	return claims
 }
@@ -181,4 +189,15 @@ func NewKratosFailureError(challengeID, message string) *ChallengeError {
 		message = "failed to resolve identity traits"
 	}
 	return NewError(http.StatusInternalServerError, "kratos_failure", message, challengeID, nil)
+}
+
+func NewAlkemioIdentityMissingError(challengeID string) *ChallengeError {
+	return NewError(http.StatusForbidden, "alkemio_identity_missing", "alkemio user mapping not found", challengeID, nil)
+}
+
+func NewAlkemioResolutionError(challengeID, message string) *ChallengeError {
+	if strings.TrimSpace(message) == "" {
+		message = "failed to resolve alkemio user id"
+	}
+	return NewError(http.StatusBadGateway, "alkemio_resolution_failed", message, challengeID, nil)
 }

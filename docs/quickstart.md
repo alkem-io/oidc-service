@@ -145,7 +145,6 @@ This script validates:
 - Email verification status handling
 - Terms acceptance status handling  
 - Unicode name support
-- Metrics and performance monitoring
 
 ### Manual Token Claims Verification
 
@@ -155,23 +154,12 @@ For manual testing, examine the token claims after completing the login flow:
 # After step 6, decode the returned tokens to verify claims:
 # Access Token will include: given_name, family_name
 # ID Token will include: given_name, family_name, email_verified, accepted_terms
-
-# Check token claims metrics
-curl -s http://localhost:8080/metrics | grep -E "(token_claims|claim_extraction)"
 ```
 
-## 9. Inspect Prometheus metrics
+Instead of scraping metrics, rely on structured zap logs (set `OIDC_LOG_LEVEL=debug`
+when needed) to observe identity resolution and token claim extraction outcomes.
 
-```sh
-curl -s http://localhost:8080/metrics | grep oidc_challenge_latency_seconds
-```
-
-Latency histograms and counters confirm the metrics endpoint is wired for
-observability dashboards. Additional token claims metrics include:
-- `oidc_token_claims_total`: Counter of claims extraction operations
-- `oidc_claim_extraction_duration_seconds`: Histogram of extraction latency
-
-## 10. GitHub Actions overview
+## 9. GitHub Actions overview
 
 The legacy `ci.yml` and `release.yml` jobs have been removed. The service now
 ships with the following workflows under `.github/workflows/`:

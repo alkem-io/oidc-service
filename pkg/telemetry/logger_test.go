@@ -21,8 +21,3 @@ func TestNewLoggerValidLevel(t *testing.T) {
 		t.Logf("logger.Sync() returned: %v", err)
 	}
 }
-
-func TestNewRegistry(t *testing.T) {
-	reg := NewRegistry()
-	require.NotNil(t, reg)
-}

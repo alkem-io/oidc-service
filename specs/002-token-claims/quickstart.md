@@ -227,12 +227,12 @@ func validateUserClaims(claims TokenClaims) error {
 ## Next Steps
 
 1. **Integration Testing**: Test with your specific client applications
-2. **Monitoring**: Monitor token size and generation performance  
+2. **Monitoring**: Review structured logs for token size and generation performance (metrics removed Nov 2025)  
 3. **User Experience**: Update UI to display enhanced user information
 4. **Compliance**: Verify enhanced claims meet your security requirements
 
 ## Support
 
 - **Logs**: Check OIDC service logs for claim generation details
-- **Metrics**: Monitor token generation metrics for performance impact
+- **Observability**: Tail zap logs for claim extraction diagnostics (metrics removed Nov 2025)
 - **Documentation**: See `data-model.md` and `contracts/` for detailed specifications

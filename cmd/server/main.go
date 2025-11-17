@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alkem-io/oidc-service/internal/alkemio"
 	"github.com/alkem-io/oidc-service/internal/challenge"
 	"github.com/alkem-io/oidc-service/internal/config"
 	"github.com/alkem-io/oidc-service/internal/hydra"
@@ -40,8 +41,6 @@ func main() {
 	}()
 
 	maint := maintenance.NewState(cfg.Maintenance())
-
-	metrics := telemetry.NewMetrics(telemetry.NewRegistry())
 
 	hydraClient, err := hydra.NewClient(hydra.Config{
 		AdminURL:  cfg.HydraAdminURL,
@@ -78,14 +77,24 @@ func main() {
 		fatal("configure kratos readiness probe", err)
 	}
 
+	identityResolver, err := alkemio.NewIdentityResolver(alkemio.Config{
+		BaseURL:     cfg.AlkemioServerURL,
+		ResolvePath: cfg.AlkemioResolvePath,
+		Timeout:     cfg.IdentityTimeout,
+		MaxRetries:  cfg.IdentityMaxRetries,
+	})
+	if err != nil {
+		fatal("configure alkemio identity resolver", err)
+	}
+
 	challengeService, err := challenge.NewService(challenge.Options{
 		Hydra:            challenge.NewHydraOAuth2Client(hydraClient.Admin().OAuth2API),
 		Identity:         challenge.NewIdentityMapper(kratosClient.Admin().IdentityAPI),
+		Alkemio:          identityResolver,
 		HydraProbe:       hydraProbe,
 		KratosProbe:      kratosProbe,
 		ReadinessTimeout: cfg.ReadinessTimeout,
 		Logger:           challenge.NewZapLoggerAdapter(logger),
-		Metrics:          metrics,
 	})
 	if err != nil {
 		fatal("configure challenge service", err)
@@ -95,7 +104,6 @@ func main() {
 		Logger:             logger,
 		Maintenance:        maint,
 		Challenge:          challengeService,
-		Metrics:            metrics,
 		SessionResolver:    sessionResolver,
 		SessionCookie:      cfg.KratosSessionCookie,
 		KratosBrowserURL:   cfg.KratosBrowserURL,

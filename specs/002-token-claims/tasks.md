@@ -37,7 +37,7 @@ Based on plan.md structure: Go backend service with domain-oriented packages in 
 - [X] T005 [P] Add Kratos identity trait extraction utilities in internal/challenge/identity_mapper.go
 - [X] T006 [P] Implement safe claim validation functions for Kratos identity traits in internal/challenge/identity_mapper.go
 - [X] T007 Add structured logging support for token claim operations in internal/challenge/service.go
-- [X] T008 Update Prometheus metrics to track token claim generation in pkg/telemetry/metrics.go
+- [X] T008 ~~Update Prometheus metrics to track token claim generation in pkg/telemetry/metrics.go~~ (metrics removed Nov 2025; rely on logging only)
 - [X] T009 [P] Create integration test for token size limit failure in test/integration/token_size_limit_test.go
 - [X] T010 [P] Create integration test for Kratos unavailability during token generation in test/integration/kratos_unavailable_test.go
 
@@ -102,7 +102,7 @@ Based on plan.md structure: Go backend service with domain-oriented packages in 
 
 **Purpose**: Improvements that affect multiple user stories
 
-- [X] T030 [P] Update operational documentation in docs/operations.md with token claim monitoring guidance
+- [X] T030 [P] Update operational documentation in docs/operations.md with token claim logging guidance
 - [X] T031 Code review and refactoring of claim extraction logic that ensures consistency across functions
 - [X] T032 [P] Add comprehensive unit tests for edge cases that validate unicode handling and boundary conditions in test/unit/identity_mapper_claims_test.go
 - [X] T033 Security review of PII handling in token claims that ensures compliance with data protection

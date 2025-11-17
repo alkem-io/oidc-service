@@ -57,15 +57,13 @@ optional `Retry-After` header derived from `OIDC_MAINTENANCE_RETRY`.
 4. **Disable maintenance** by removing or setting the toggle to `false` and
    redeploying.
 
-## Token Claims Monitoring
+## Token Claims Observability
 
-The service enhances OIDC tokens with user profile and compliance claims. Monitor these key metrics and behaviors:
+The service enhances OIDC tokens with user profile and compliance claims. Rely on structured logs (no Prometheus metrics) to monitor these behaviours:
 
-### Metrics to Monitor
-
-- **Token claim generation rates**: `token_claims_total` and `token_claims_generated` histograms track claim extraction success/failure
-- **Token claim types**: Monitor both Access token claims (`given_name`, `family_name`) and ID token claims (`given_name`, `family_name`, `email_verified`, `accepted_terms`)
-- **Claim extraction errors**: Watch for spikes in failed claim extractions which may indicate Kratos identity data issues
+- **Token claim generation rates**: Search for `added enhanced claims` log entries to confirm extraction success/failure
+- **Token claim types**: Inspect logs that include emitted claim names (Access tokens: `given_name`, `family_name`; ID tokens: `given_name`, `family_name`, `email_verified`, `accepted_terms`)
+- **Claim extraction errors**: Watch for `failed to extract` log entries, which flag Kratos identity data issues
 
 ### Expected Claim Behavior
 

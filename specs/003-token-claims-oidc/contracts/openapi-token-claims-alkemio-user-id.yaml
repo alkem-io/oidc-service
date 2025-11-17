@@ -1,0 +1,16 @@
+openapi: 3.0.0
+info:
+  title: OIDC Service Token Claims Extension - Alkemio User ID
+  version: 0.1.0
+
+paths: {}
+
+components:
+  schemas:
+    TokenClaimsAlkemioUserId:
+      type: object
+      description: Extension of token claims to include the Alkemio user ID when available.
+      properties:
+        alkemio_user_id:
+          type: string
+          description: Alkemio user identifier resolved as `userId` from the Alkemio server endpoint `POST /rest/internal/identity/resolve`.

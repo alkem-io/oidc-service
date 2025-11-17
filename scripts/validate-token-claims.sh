@@ -318,23 +318,6 @@ main() {
     test_token_claims "Unicode Names" "$id4" "José" "García" "true" "true"
     cleanup_test_identity "$id4" "Unicode Names"
     
-    # Step 3: Verify metrics are working
-    log "=== Step 3: Metrics Validation ==="
-    local metrics_response=$(curl -s "$OIDC_SERVICE_URL/metrics")
-    if echo "$metrics_response" | grep -q "oidc_token_claims_total"; then
-        success "Token claims metrics are being recorded"
-    else
-        warning "Token claims metrics not found - check implementation"
-    fi
-    
-    # Step 4: Performance validation
-    log "=== Step 4: Performance Validation ==="
-    if echo "$metrics_response" | grep -q "oidc_challenge_latency_seconds"; then
-        success "Challenge processing latency metrics are available"
-    else
-        warning "Challenge latency metrics not found"
-    fi
-    
     log "=== Validation Complete ==="
     success "All token claims scenarios validated successfully!"
     
@@ -346,14 +329,11 @@ main() {
 ✅ Email verification status handling validated
 ✅ Terms acceptance status handling validated
 ✅ Unicode name handling validated
-✅ Metrics endpoint verified
-✅ Performance monitoring confirmed
 
 🎉 The OIDC service token claims implementation is ready for production!
 
 Next Steps:
 - Deploy to staging environment for full integration testing
-- Configure monitoring dashboards using the available metrics
 - Review token claims in your client applications
 - Validate compliance with your data protection requirements
 EOF

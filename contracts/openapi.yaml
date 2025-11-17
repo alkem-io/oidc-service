@@ -112,18 +112,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ReadinessState'
-  /metrics:
-    get:
-      summary: Prometheus metrics endpoint
-      operationId: getMetrics
-      security: []
-      responses:
-        "200":
-          description: Text-based metrics exposition format.
-          content:
-            text/plain:
-              schema:
-                type: string
 components:
   securitySchemes:
     HydraLoginChallenge:

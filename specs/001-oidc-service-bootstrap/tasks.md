@@ -13,7 +13,7 @@
 ## Phase 2: Foundational (Blocking Prerequisites)
 
 - [x] T010 Implement typed configuration loader in `internal/config/config.go`
-- [x] T011 [P] Add structured logging + metrics utilities in `pkg/telemetry`
+- [x] T011 [P] Add structured logging utilities in `pkg/telemetry` (metrics support removed Nov 2025)
 - [x] T012 [P] Build Hydra and Kratos clients with timeout-aware HTTP transport (`internal/hydra`, `internal/kratos`)
 - [x] T013 Wire chi router, middleware, and telemetry bootstrap in `cmd/server/main.go`
 - [x] T014 Establish contract + integration test harness under `test/`
@@ -37,7 +37,7 @@
 - [x] T111 [US1] Implement `ChallengeService.Login` orchestration (`internal/challenge/service.go`)
 - [x] T112 [US1] Implement login handler + DTO mapping in `internal/server/login_handler.go`
 - [x] T113 [US1] Add maintenance short-circuit middleware path (`internal/middleware/maintenance.go`)
-- [x] T114 [US1] Record metrics + logs for login outcomes (`pkg/telemetry/metrics.go`)
+- [x] T114 [US1] Record logs for login outcomes (`pkg/telemetry`, metrics requirement removed Nov 2025)
 
 **Checkpoint**: Login endpoint independently deployable.
 
@@ -75,7 +75,7 @@
 
 - [x] T310 [US3] Build readiness checker aggregating Hydra/Kratos/database (`internal/challenge/readiness_http.go`)
 - [x] T311 [P] [US3] Implement maintenance state + HTTP handlers (`internal/maintenance/state.go`, `internal/server/router.go`)
-- [x] T312 [US3] Expose `/metrics` Prometheus handler in `internal/server/router.go`
+- [x] T312 [US3] ~~Expose `/metrics` Prometheus handler in `internal/server/router.go`~~ (removed Nov 2025; observability handled via structured logs only)
 
 **Checkpoint**: Service operationally ready with health + maintenance endpoints.
 

@@ -6,7 +6,6 @@ Standalone Go 1.25 service that resolves Hydra login and consent challenges, fet
 
 - Public: `/oidc/login`, `/oidc/consent`
 - Health: `/health/ready`, `/health/live`
-- Metrics: `/metrics`
 
 On `session_required`/`session_invalid`, the service redirects browsers to the
 Kratos login flow and returns to `/oidc/login` after authentication.

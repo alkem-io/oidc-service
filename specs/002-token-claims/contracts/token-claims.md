@@ -63,7 +63,7 @@ This document specifies the enhanced token claims that will be added to Access t
 **No changes to existing API endpoints**. The OIDC service API contract remains unchanged:
 - `/v1/oidc/login` - behavior unchanged
 - `/v1/oidc/consent` - behavior unchanged  
-- Health and metrics endpoints - unchanged
+- Health endpoints - unchanged (metrics endpoint removed Nov 2025)
 
 ### Error Responses
 

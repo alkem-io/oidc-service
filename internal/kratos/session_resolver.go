@@ -89,7 +89,9 @@ func (r *SessionResolver) IdentityID(ctx context.Context, sessionCookie string) 
 	if err != nil {
 		return "", fmt.Errorf("kratos whoami request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	switch resp.StatusCode {
 	case http.StatusOK:

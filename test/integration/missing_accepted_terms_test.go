@@ -3,213 +3,266 @@ package integration_test
 import (
 	"testing"
 
-	"github.com/alkem-io/oidc-service/internal/challenge"
+	testsupport "github.com/alkem-io/oidc-service/test/support"
 )
 
-// TestMissingAcceptedTermsIntegration tests integration behavior when accepted_terms trait is missing.
-func TestMissingAcceptedTermsIntegration(t *testing.T) {
-	// Create a service instance with mocked dependencies
-	// This test validates that missing accepted_terms trait properly omits the claim
-	
-	// TODO: In a full implementation, this would:
-	// 1. Create a mock Kratos identity with missing accepted_terms trait
-	// 2. Execute the full consent flow through the service
-	// 3. Verify that the resulting ID token does not contain accepted_terms claim
-	// 4. Ensure other claims are still properly included
-	
-	// For now, we document the expected integration behavior
+// TestAcceptedTermsClaims ensures accepted_terms is only emitted when the trait is a strict boolean or supported string.
+func TestAcceptedTermsClaims(t *testing.T) {
 	testCases := []struct {
-		name        string
-		description string
-		setupData   map[string]interface{}
-		expectClaim bool
+		name         string
+		identityJSON string
+		expected     *bool
+		description  string
 	}{
 		{
-			name:        "EmptyTraits",
-			description: "Empty traits object should omit accepted_terms claim",
-			setupData:   map[string]interface{}{},
-			expectClaim: false,
+			name: "EmptyTraits",
+			identityJSON: `{
+				"traits": {}
+			}`,
+			expected:    nil,
+			description: "Empty traits omits accepted_terms",
 		},
 		{
-			name:        "OtherTraitsOnly",
-			description: "Traits with only other fields should omit accepted_terms claim",
-			setupData: map[string]interface{}{
-				"email":      "user@example.com",
-				"given_name": "John",
-				"family_name": "Doe",
-			},
-			expectClaim: false,
+			name: "OtherTraitsOnly",
+			identityJSON: `{
+				"traits": {
+					"email": "user@example.com",
+					"name": {
+						"first": "Alex",
+						"last": "River"
+					}
+				}
+			}`,
+			expected:    nil,
+			description: "Unrelated traits should not fabricate accepted_terms",
 		},
 		{
-			name:        "NullAcceptedTerms",
-			description: "Null accepted_terms should omit claim",
-			setupData: map[string]interface{}{
-				"email":          "user@example.com",
-				"accepted_terms": nil,
-			},
-			expectClaim: false,
+			name: "NullAcceptedTerms",
+			identityJSON: `{
+				"traits": {
+					"accepted_terms": null
+				}
+			}`,
+			expected:    nil,
+			description: "Null accepted_terms omits the claim",
+		},
+		{
+			name: "TrueBoolean",
+			identityJSON: `{
+				"traits": {
+					"accepted_terms": true
+				}
+			}`,
+			expected:    boolPtr(true),
+			description: "Boolean true should surface accepted_terms",
+		},
+		{
+			name: "FalseBoolean",
+			identityJSON: `{
+				"traits": {
+					"accepted_terms": false
+				}
+			}`,
+			expected:    boolPtr(false),
+			description: "Boolean false still surfaces the claim",
+		},
+		{
+			name: "StringTrue",
+			identityJSON: `{
+				"traits": {
+					"accepted_terms": "true"
+				}
+			}`,
+			expected:    boolPtr(true),
+			description: "String true coerces to boolean",
+		},
+		{
+			name: "StringNumericOne",
+			identityJSON: `{
+				"traits": {
+					"accepted_terms": "1"
+				}
+			}`,
+			expected:    boolPtr(true),
+			description: "Numeric string one coerces to true",
+		},
+		{
+			name: "StringFalse",
+			identityJSON: `{
+				"traits": {
+					"accepted_terms": "false"
+				}
+			}`,
+			expected:    boolPtr(false),
+			description: "String false coerces to boolean",
+		},
+		{
+			name: "UnsupportedType",
+			identityJSON: `{
+				"traits": {
+					"accepted_terms": 123
+				}
+			}`,
+			expected:    nil,
+			description: "Unsupported numbers omit the claim",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Simulate creating an identity with the test case traits
-			// In a real test, this would use actual Kratos client or mock
-			
-			// Create TokenClaims to simulate the result
-			claims := challenge.TokenClaims{}
-			
-			// Validate that accepted_terms claim handling matches expectations
-			if tc.expectClaim && claims.AcceptedTerms == nil {
-				t.Errorf("%s: expected accepted_terms claim to be present, but it was omitted", tc.description)
-			} else if !tc.expectClaim && claims.AcceptedTerms != nil {
-				t.Errorf("%s: expected accepted_terms claim to be omitted, but got %v", tc.description, *claims.AcceptedTerms)
+			claims := testsupport.ExtractTokenClaimsFromJSON(t, tc.identityJSON)
+			idTokenClaims := claims.ToIDTokenMap()
+
+			if tc.expected == nil {
+				if claims.AcceptedTerms != nil {
+					t.Fatalf("%s: expected claim omission, got %v", tc.description, *claims.AcceptedTerms)
+				}
+				if _, exists := idTokenClaims["accepted_terms"]; exists {
+					t.Fatalf("%s: claim leaked into ID token map", tc.description)
+				}
+				return
+			}
+
+			if claims.AcceptedTerms == nil {
+				t.Fatalf("%s: expected claim presence", tc.description)
+			}
+			if *claims.AcceptedTerms != *tc.expected {
+				t.Fatalf("%s: expected accepted_terms=%v, got %v", tc.description, *tc.expected, *claims.AcceptedTerms)
+			}
+
+			value, ok := idTokenClaims["accepted_terms"].(bool)
+			if !ok {
+				t.Fatalf("%s: expected boolean in ID token map", tc.description)
+			}
+			if value != *tc.expected {
+				t.Fatalf("%s: ID token map mismatch expected %v got %v", tc.description, *tc.expected, value)
 			}
 		})
 	}
 }
 
-// TestAcceptedTermsServiceIntegration tests service-level integration of accepted_terms claim processing.
-func TestAcceptedTermsServiceIntegration(t *testing.T) {
-	// Test the complete flow from identity traits to token claims
-	
+// TestEmailVerifiedClaims ensures email_verified matches the verifiable address state.
+func TestEmailVerifiedClaims(t *testing.T) {
 	testCases := []struct {
-		name          string
-		description   string
-		identityTraits map[string]interface{}
-		expectInIDToken bool
-		expectedValue   *bool
+		name         string
+		identityJSON string
+		expected     *bool
+		description  string
 	}{
 		{
-			name:        "AcceptedTrue",
-			description: "accepted_terms: true should appear in ID token",
-			identityTraits: map[string]interface{}{
-				"email":          "user@example.com",
-				"accepted_terms": true,
-			},
-			expectInIDToken: true,
-			expectedValue:   boolPtr(true),
-		},
-		{
-			name:        "AcceptedFalse", 
-			description: "accepted_terms: false should appear in ID token",
-			identityTraits: map[string]interface{}{
-				"email":          "user@example.com",
-				"accepted_terms": false,
-			},
-			expectInIDToken: true,
-			expectedValue:   boolPtr(false),
-		},
-		{
-			name:        "NotAccepted",
-			description: "Missing accepted_terms should not appear in ID token",
-			identityTraits: map[string]interface{}{
-				"email": "user@example.com",
-			},
-			expectInIDToken: false,
-			expectedValue:   nil,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// TODO: In a full implementation, this would:
-			// 1. Create a complete service with dependencies
-			// 2. Mock the Kratos identity response with tc.identityTraits
-			// 3. Execute the consent flow
-			// 4. Parse the resulting ID token
-			// 5. Verify the accepted_terms claim presence/absence and value
-			
-			// For now, validate the expected behavior structure
-			if tc.expectInIDToken && tc.expectedValue == nil {
-				t.Errorf("%s: test case expects claim in ID token but expectedValue is nil", tc.description)
-			}
-			
-			if !tc.expectInIDToken && tc.expectedValue != nil {
-				t.Errorf("%s: test case expects no claim but expectedValue is set", tc.description)
-			}
-		})
-	}
-}
-
-// TestEmailVerificationServiceIntegration tests service-level integration of email_verified claim processing.
-func TestEmailVerificationServiceIntegration(t *testing.T) {
-	// Test the complete flow from verifiable addresses to token claims
-	
-	testCases := []struct {
-		name                string
-		description         string 
-		identityTraits      map[string]interface{}
-		verifiableAddresses []map[string]interface{}
-		expectInIDToken     bool
-		expectedValue       *bool
-	}{
-		{
-			name:        "VerifiedEmail",
-			description: "Verified email should result in email_verified: true",
-			identityTraits: map[string]interface{}{
-				"email": "user@example.com",
-			},
-			verifiableAddresses: []map[string]interface{}{
-				{
-					"value":    "user@example.com",
-					"verified": true,
-					"via":      "email",
+			name: "VerifiedEmail",
+			identityJSON: `{
+				"traits": {
+					"email": "user@example.com"
 				},
-			},
-			expectInIDToken: true,
-			expectedValue:   boolPtr(true),
+				"verifiable_addresses": [
+					{
+						"value": "user@example.com",
+						"verified": true,
+						"via": "email"
+					}
+				]
+			}`,
+			expected:    boolPtr(true),
+			description: "Verified email sets claim true",
 		},
 		{
-			name:        "UnverifiedEmail",
-			description: "Unverified email should result in email_verified: false",
-			identityTraits: map[string]interface{}{
-				"email": "user@example.com",
-			},
-			verifiableAddresses: []map[string]interface{}{
-				{
-					"value":    "user@example.com",
-					"verified": false,
-					"via":      "email",
+			name: "UnverifiedEmail",
+			identityJSON: `{
+				"traits": {
+					"email": "user@example.com"
 				},
-			},
-			expectInIDToken: true,
-			expectedValue:   boolPtr(false),
+				"verifiable_addresses": [
+					{
+						"value": "user@example.com",
+						"verified": false,
+						"via": "email"
+					}
+				]
+			}`,
+			expected:    boolPtr(false),
+			description: "Presence but no verification yields false",
 		},
 		{
-			name:        "NoEmail",
-			description: "No email address should omit email_verified claim",
-			identityTraits: map[string]interface{}{
-				"given_name": "John",
-			},
-			verifiableAddresses: []map[string]interface{}{},
-			expectInIDToken:     false,
-			expectedValue:       nil,
+			name: "NoEmailAddresses",
+			identityJSON: `{
+				"traits": {
+					"email": "user@example.com"
+				}
+			}`,
+			expected:    nil,
+			description: "Missing verifiable addresses omits claim",
+		},
+		{
+			name: "NonEmailAddress",
+			identityJSON: `{
+				"traits": {
+					"email": "user@example.com"
+				},
+				"verifiable_addresses": [
+					{
+						"value": "+15555555555",
+						"verified": true,
+						"via": "sms"
+					}
+				]
+			}`,
+			expected:    nil,
+			description: "Non-email channels should not emit claim",
+		},
+		{
+			name: "MissingVerifiedFieldDefaultsFalse",
+			identityJSON: `{
+				"traits": {
+					"email": "user@example.com"
+				},
+				"verifiable_addresses": [
+					{
+						"value": "user@example.com",
+						"via": "email"
+					}
+				]
+			}`,
+			expected:    boolPtr(false),
+			description: "Missing verified flag behaves like false",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// TODO: In a full implementation, this would:
-			// 1. Create a complete service with dependencies
-			// 2. Mock the Kratos identity response with tc.identityTraits and tc.verifiableAddresses
-			// 3. Execute the consent flow  
-			// 4. Parse the resulting ID token
-			// 5. Verify the email_verified claim presence/absence and value
-			
-			// For now, validate the expected behavior structure
-			if tc.expectInIDToken && tc.expectedValue == nil {
-				t.Errorf("%s: test case expects claim in ID token but expectedValue is nil", tc.description)
+			claims := testsupport.ExtractTokenClaimsFromJSON(t, tc.identityJSON)
+			idTokenClaims := claims.ToIDTokenMap()
+
+			if tc.expected == nil {
+				if claims.EmailVerified != nil {
+					t.Fatalf("%s: expected claim omission, got %v", tc.description, *claims.EmailVerified)
+				}
+				if _, exists := idTokenClaims["email_verified"]; exists {
+					t.Fatalf("%s: claim leaked into ID token map", tc.description)
+				}
+				return
 			}
-			
-			if !tc.expectInIDToken && tc.expectedValue != nil {
-				t.Errorf("%s: test case expects no claim but expectedValue is set", tc.description)
+
+			if claims.EmailVerified == nil {
+				t.Fatalf("%s: expected claim presence", tc.description)
+			}
+			if *claims.EmailVerified != *tc.expected {
+				t.Fatalf(
+					"%s: expected email_verified=%v, got %v", tc.description, *tc.expected, *claims.EmailVerified,
+				)
+			}
+
+			value, ok := idTokenClaims["email_verified"].(bool)
+			if !ok {
+				t.Fatalf("%s: expected boolean in ID token map", tc.description)
+			}
+			if value != *tc.expected {
+				t.Fatalf("%s: ID token map mismatch expected %v got %v", tc.description, *tc.expected, value)
 			}
 		})
 	}
 }
 
-// boolPtr is a helper function to create a pointer to a boolean value.
 func boolPtr(b bool) *bool {
 	return &b
 }

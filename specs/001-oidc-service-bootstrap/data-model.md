@@ -63,13 +63,11 @@ Tracks whether the service is allowing traffic.
 | `OIDC_SESSION_COOKIE` | `ory_kratos_session` | Kratos session cookie name |
 | `OIDC_MAINTENANCE_SHARED_SECRET` | none | Secret required to toggle maintenance |
 | `OIDC_LOG_LEVEL` | `info` | zap log level |
-| `OIDC_METRICS_ENABLED` | `true` | Enable Prometheus handler |
 
 ## External Interfaces
 
 - **Hydra Admin**: `GET /oauth2/auth/requests/login`, `PUT /oauth2/auth/requests/login/accept`, equivalent consent endpoints.
 - **Kratos**: `GET /sessions/whoami` with session cookie header.
-- **Prometheus**: `/metrics` endpoint exposed on same listener.
 - **Health**: `/health/live`, `/health/ready` returning JSON state snapshots.
 
 ## Error Catalogue
@@ -84,11 +82,7 @@ Tracks whether the service is allowing traffic.
 
 ## Observability
 
-- **Logs**: Fields include `component`, `challenge_id`, `redirect_to`, `status`, `maintenance_active`.
-- **Metrics**:
-  - `oidc_request_duration_seconds` histogram labelled by `endpoint` and `result`.
-  - `oidc_hydra_request_total` counter partitioned by method and status.
-  - `oidc_maintenance_state` gauge reflecting active (1) vs inactive (0).
+- **Logs**: Fields include `component`, `challenge_id`, `redirect_to`, `status`, `maintenance_active`. These structured logs replaced the earlier Prometheus metrics requirement (removed Nov 2025) and now serve as the authoritative operational signal.
 
 ## Data Flow Overview
 
@@ -98,5 +92,5 @@ Tracks whether the service is allowing traffic.
 4. Hydra client fetches challenge metadata.
 5. Kratos client resolves session (login only).
 6. Hydra client accepts/denies challenge.
-7. Presenter logs outcome, records metrics, sends JSON response.
+7. Presenter logs outcome and sends JSON response (metrics removed per Nov 2025 decision).
 8. Health endpoints aggregate component checkers and emit JSON.

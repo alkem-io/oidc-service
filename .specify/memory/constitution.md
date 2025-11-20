@@ -10,28 +10,31 @@
 3. **Secure External Integrations**
    - Hydra and Kratos clients enforce request-scoped timeouts, structured error translation, and never log tokens or secrets.
 4. **Operational Observability**
-   - Zap logging includes correlation IDs, challenge IDs, and outcome status. Prometheus metrics expose latency histograms and counters for every request path.
+   - Zap logging includes correlation IDs, challenge IDs, and outcome status. Prometheus metrics were intentionally removed in Nov 2025; structured logs (shipped via the platform stack) are the single required observability signal.
 5. **Fail-Fast Maintenance Controls**
    - Maintenance mode immediately returns HTTP 503 with Retry-After headers without touching external services.
 6. **Test-Driven Delivery**
-   - Contract tests exercise OpenAPI behaviour before handler implementation. Integration tests cover Hydra/Kratos error paths and maintenance toggles.
+   - Tests exist only when they defend a real invariant or observable behaviour. Contract tests exercise OpenAPI behaviour before handler implementation, integration tests cover Hydra/Kratos error paths and maintenance toggles, and we explicitly avoid superficial "coverage padding" or placeholder tests that do not catch regressions.
 7. **Reproducible Containers**
    - Docker builds pin base image digests, run `go test` and `go build` in multi-stage pipeline, and produce distroless runtime images.
 8. **CI Integrity**
    - GitHub Actions pipelines run linting, unit tests, integration smoke, SBOM generation, and signed Docker pushes before releases.
+9. **Evidence-Based Performance Goals**
+   - Do not invent ad-hoc SLAs (e.g., "p95 < 500 ms") for thin orchestration layers whose latency is dominated by external systems. Only codify performance targets when the service owns the bottleneck and can meaningfully improve it; otherwise focus on timeout budgets, dependency health checks, and log-based diagnostics.
 
 ## Architecture Standards
 
 - Directory layout:
   - `cmd/server`: entrypoint wiring configuration and HTTP server start.
   - `internal/*`: non-exported packages encapsulating config, clients, middleware, and domain orchestration.
-  - `pkg/telemetry`: shared instrumentation utilities safe for reuse.
+   - `pkg/telemetry`: shared logging utilities safe for reuse.
   - `configs/`: sample environment files and documentation.
   - `contracts/`: OpenAPI definitions and generated fixtures.
   - `docs/`: operational runbooks and quickstarts.
 - Interfaces to external systems (`internal/hydra`, `internal/kratos`) expose narrow methods consumed by the challenge service.
 - Health endpoints (`/health/live`, `/health/ready`) MUST satisfy constitution observability principle with structured JSON responses.
-- Maintenance middleware short-circuits request handling while still recording metrics.
+- Maintenance middleware short-circuits request handling while still recording structured logs.
+- Performance requirements appear only when the service directly controls the critical path; otherwise specifications MUST document dependency expectations instead of arbitrary p95 quotas.
 
 ## Engineering Workflow
 
@@ -46,4 +49,4 @@
 - Major changes (new external dependency, architecture shift) require constitution update and review.
 - Operability incidents result in follow-up tasks captured in Spec Kit memory.
 
-**Version**: 1.0.0 | **Ratified**: 2025-10-29 | **Last Amended**: 2025-10-29
+**Version**: 1.3.0 | **Ratified**: 2025-10-29 | **Last Amended**: 2025-11-17

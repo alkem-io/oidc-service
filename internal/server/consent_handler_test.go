@@ -20,7 +20,7 @@ func TestConsentHandlerRedirectsOnSuccess(t *testing.T) {
 		},
 	}
 
-	handler := NewConsentHandler(zap.NewNop(), svc, nil)
+	handler := NewConsentHandler(zap.NewNop(), svc)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/oidc/consent?consent_challenge=consent-123", nil)
 	rec := httptest.NewRecorder()
@@ -32,7 +32,7 @@ func TestConsentHandlerRedirectsOnSuccess(t *testing.T) {
 }
 
 func TestConsentHandlerMissingChallengeReturnsBadRequest(t *testing.T) {
-	handler := NewConsentHandler(zap.NewNop(), &challengeServiceStub{}, nil)
+	handler := NewConsentHandler(zap.NewNop(), &challengeServiceStub{})
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/oidc/consent", nil)
 	rec := httptest.NewRecorder()
@@ -53,7 +53,7 @@ func TestConsentHandlerPropagatesServiceError(t *testing.T) {
 		},
 	}
 
-	handler := NewConsentHandler(zap.NewNop(), svc, nil)
+	handler := NewConsentHandler(zap.NewNop(), svc)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/oidc/consent?consent_challenge=missing", nil)
 	rec := httptest.NewRecorder()
@@ -65,22 +65,4 @@ func TestConsentHandlerPropagatesServiceError(t *testing.T) {
 	var payload map[string]any
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
 	require.Equal(t, "invalid_challenge", payload["error"])
-}
-
-func TestConsentHandlerRecordsMetrics(t *testing.T) {
-	metrics := &challengeMetricsStub{}
-	handler := NewConsentHandler(zap.NewNop(), &challengeServiceStub{
-		resolveConsent: func(ctx context.Context, challengeID string) (*challenge.Resolution, error) {
-			return &challenge.Resolution{RedirectURL: "https://consent"}, nil
-		},
-	}, metrics)
-
-	req := httptest.NewRequest(http.MethodGet, "/v1/oidc/consent?consent_challenge=consent", nil)
-	rec := httptest.NewRecorder()
-
-	handler.Handle(rec, req)
-
-	require.Equal(t, "consent", metrics.flow)
-	require.Equal(t, "success", metrics.outcome)
-	require.Equal(t, "none", metrics.errorCode)
 }

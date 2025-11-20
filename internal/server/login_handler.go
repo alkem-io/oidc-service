@@ -11,7 +11,6 @@ import (
 
 	"github.com/alkem-io/oidc-service/internal/challenge"
 	middlewarepkg "github.com/alkem-io/oidc-service/internal/middleware"
-	"github.com/alkem-io/oidc-service/pkg/telemetry"
 	"go.uber.org/zap"
 )
 
@@ -24,7 +23,6 @@ type SessionIdentityResolver interface {
 type LoginHandler struct {
 	logger            *zap.Logger
 	service           challenge.Service
-	metrics           telemetry.ChallengeRecorder
 	sessionResolver   SessionIdentityResolver
 	paramKey          string
 	sessionCookie     string
@@ -36,7 +34,6 @@ type LoginHandler struct {
 type LoginHandlerConfig struct {
 	Logger           *zap.Logger
 	Challenge        challenge.Service
-	Metrics          telemetry.ChallengeRecorder
 	SessionResolver  SessionIdentityResolver
 	SessionCookie    string
 	KratosBrowserURL string
@@ -63,7 +60,6 @@ func NewLoginHandler(cfg LoginHandlerConfig) *LoginHandler {
 	handler := &LoginHandler{
 		logger:          logger,
 		service:         svc,
-		metrics:         cfg.Metrics,
 		sessionResolver: cfg.SessionResolver,
 		paramKey:        "login_challenge",
 		sessionCookie:   cookie,
@@ -96,7 +92,6 @@ func (h *LoginHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	challengeID := strings.TrimSpace(r.URL.Query().Get(h.paramKey))
 	if challengeID == "" {
 		err := challenge.NewError(http.StatusBadRequest, "missing_challenge", "login challenge is required", "", nil)
-		h.observe(started, err)
 		middlewarepkg.WriteChallengeError(w, r, err)
 		return
 	}
@@ -109,12 +104,9 @@ func (h *LoginHandler) Handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		h.observe(started, err)
 		middlewarepkg.WriteChallengeError(w, r, err)
 		return
 	}
-
-	h.observe(started, nil)
 
 	redirectTo := resolution.RedirectURL
 	logger := middlewarepkg.Logger(r.Context())
@@ -175,36 +167,6 @@ func (h *LoginHandler) buildHintProvider(r *http.Request) challenge.IdentityHint
 	)
 }
 
-func (h *LoginHandler) observe(started time.Time, err error) {
-	if h.metrics == nil {
-		return
-	}
-
-	outcome := "success"
-	errorCode := "none"
-	if err != nil {
-		outcome, errorCode = classifyOutcome(err)
-	}
-
-	h.metrics.ObserveChallenge("login", outcome, errorCode, time.Since(started))
-}
-
-func classifyOutcome(err error) (string, string) {
-	var chErr challenge.Error
-	if errors.As(err, &chErr) {
-		code := chErr.Code()
-		switch status := chErr.StatusCode(); {
-		case status == http.StatusServiceUnavailable:
-			return "maintenance", code
-		case status >= 400 && status < 500:
-			return "client_error", code
-		default:
-			return "server_error", code
-		}
-	}
-	return "server_error", "unexpected_error"
-}
-
 func (h *LoginHandler) handleSessionRedirect(
 	w http.ResponseWriter, r *http.Request, challengeID string, started time.Time, err error,
 ) bool {
@@ -231,8 +193,6 @@ func (h *LoginHandler) handleSessionRedirect(
 		)
 		return false
 	}
-
-	h.observe(started, err)
 
 	logger := middlewarepkg.Logger(r.Context())
 	if logger == nil {

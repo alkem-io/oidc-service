@@ -12,7 +12,7 @@ Port the Alkemio OIDC orchestration from the legacy NestJS server into a standal
 
 **Language/Version**: Go 1.22
 
-**Primary Dependencies**: `chi` for routing, `ory/hydra-client-go`, `zap` for logging, `github.com/prometheus/client_golang`, `github.com/kelseyhightower/envconfig`
+**Primary Dependencies**: `chi` for routing, `ory/hydra-client-go`, `zap` for logging, `github.com/kelseyhightower/envconfig`
 
 **Storage**: MySQL (Kratos session database read access), Redis not required by this service
 
@@ -22,7 +22,7 @@ Port the Alkemio OIDC orchestration from the legacy NestJS server into a standal
 
 **Project Type**: Headless HTTP service
 
-**Performance Goals**: p95 login latency < 500 ms, readiness checks < 200 ms even under load
+**Performance Goals**: None beyond honoring configured timeouts; external Hydra/Kratos latency dominates so we rely on observability instead of numerical SLAs.
 
 **Constraints**: All outbound calls must honour configured timeouts; maintenance must short-circuit without hitting Hydra/Kratos; container image based on distroless runtime
 
@@ -33,7 +33,7 @@ Port the Alkemio OIDC orchestration from the legacy NestJS server into a standal
 - Domain-Oriented Packages: `internal/challenge`, `internal/login`, `internal/consent`, `internal/maintenance` encapsulate orchestration logic – compliant.
 - Deterministic Configuration: `internal/config` centralises env parsing – compliant.
 - Secure External Integrations: Hydra/Kratos clients built with timeouts and error wrapping – compliant.
-- Observability: Structured zap logging and Prometheus metrics wired in `cmd/server` – compliant.
+- Observability: Structured zap logging wired in `cmd/server`; Prometheus metrics were retired (Nov 2025) per updated requirements – compliant.
 - Fail-Fast Maintenance Controls: `internal/maintenance` middleware short-circuits requests – compliant.
 - Test-Driven Delivery: Contract, integration, and unit suites defined under `test/` – compliant.
 - Reproducible Containers: Multi-stage Dockerfile pinned to go1.22 bookworm and distroless runtime – compliant.

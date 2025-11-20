@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/alkem-io/oidc-service/internal/challenge"
 	"github.com/stretchr/testify/require"
@@ -77,28 +76,6 @@ func TestLoginHandlerPropagatesServiceError(t *testing.T) {
 	require.Equal(t, "invalid_challenge", payload["error"])
 }
 
-func TestLoginHandlerRecordsMetrics(t *testing.T) {
-	metrics := &challengeMetricsStub{}
-	handler := NewLoginHandler(LoginHandlerConfig{
-		Logger: zap.NewNop(),
-		Challenge: &challengeServiceStub{
-			resolveLogin: func(ctx context.Context, challengeID string) (*challenge.Resolution, error) {
-				return &challenge.Resolution{RedirectURL: "https://redirect"}, nil
-			},
-		},
-		Metrics: metrics,
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/v1/oidc/login?login_challenge=test", nil)
-	rec := httptest.NewRecorder()
-
-	handler.Handle(rec, req)
-
-	require.Equal(t, "login", metrics.flow)
-	require.Equal(t, "success", metrics.outcome)
-	require.Equal(t, "none", metrics.errorCode)
-}
-
 func TestLoginHandlerProvidesSessionHint(t *testing.T) {
 	var resolverCalled bool
 	handler := NewLoginHandler(LoginHandlerConfig{
@@ -159,7 +136,6 @@ func TestLoginHandlerMissingSessionCreatesHintProvider(t *testing.T) {
 }
 
 func TestLoginHandlerRedirectsToKratosLoginWhenSessionRequired(t *testing.T) {
-	metrics := &challengeMetricsStub{}
 	handler := NewLoginHandler(LoginHandlerConfig{
 		Logger: zap.NewNop(),
 		Challenge: &challengeServiceStub{
@@ -167,7 +143,6 @@ func TestLoginHandlerRedirectsToKratosLoginWhenSessionRequired(t *testing.T) {
 				return nil, challenge.NewSessionRequiredError(challengeID)
 			},
 		},
-		Metrics:          metrics,
 		KratosBrowserURL: "https://kratos.example",
 	})
 
@@ -180,13 +155,9 @@ func TestLoginHandlerRedirectsToKratosLoginWhenSessionRequired(t *testing.T) {
 
 	require.Equal(t, http.StatusFound, rec.Code)
 	require.Equal(t, "https://kratos.example/self-service/login/browser?return_to=https%3A%2F%2Fapp.example%2Fv1%2Foidc%2Flogin%3Flogin_challenge%3Dtest", rec.Header().Get("Location"))
-	require.Equal(t, "login", metrics.flow)
-	require.Equal(t, "client_error", metrics.outcome)
-	require.Equal(t, "session_required", metrics.errorCode)
 }
 
 func TestLoginHandlerRedirectsToKratosLoginWhenSessionInvalid(t *testing.T) {
-	metrics := &challengeMetricsStub{}
 	handler := NewLoginHandler(LoginHandlerConfig{
 		Logger: zap.NewNop(),
 		Challenge: &challengeServiceStub{
@@ -194,7 +165,6 @@ func TestLoginHandlerRedirectsToKratosLoginWhenSessionInvalid(t *testing.T) {
 				return nil, challenge.NewSessionInvalidError(challengeID)
 			},
 		},
-		Metrics:          metrics,
 		KratosBrowserURL: "https://kratos.example",
 	})
 
@@ -207,13 +177,9 @@ func TestLoginHandlerRedirectsToKratosLoginWhenSessionInvalid(t *testing.T) {
 
 	require.Equal(t, http.StatusFound, rec.Code)
 	require.Equal(t, "https://kratos.example/self-service/login/browser?return_to=https%3A%2F%2Fapp.example%2Fv1%2Foidc%2Flogin%3Flogin_challenge%3Dtest", rec.Header().Get("Location"))
-	require.Equal(t, "login", metrics.flow)
-	require.Equal(t, "client_error", metrics.outcome)
-	require.Equal(t, "session_invalid", metrics.errorCode)
 }
 
 func TestLoginHandlerRedirectsToKratosLoginWithForwardedPrefix(t *testing.T) {
-	metrics := &challengeMetricsStub{}
 	handler := NewLoginHandler(LoginHandlerConfig{
 		Logger: zap.NewNop(),
 		Challenge: &challengeServiceStub{
@@ -221,7 +187,6 @@ func TestLoginHandlerRedirectsToKratosLoginWithForwardedPrefix(t *testing.T) {
 				return nil, challenge.NewSessionRequiredError(challengeID)
 			},
 		},
-		Metrics:          metrics,
 		KratosBrowserURL: "https://kratos.example/ory/kratos/public",
 	})
 
@@ -235,13 +200,9 @@ func TestLoginHandlerRedirectsToKratosLoginWithForwardedPrefix(t *testing.T) {
 
 	require.Equal(t, http.StatusFound, rec.Code)
 	require.Equal(t, "https://kratos.example/ory/kratos/public/self-service/login/browser?return_to=https%3A%2F%2Fapp.example%2Fory%2Fkratos%2Fpublic%2Fv1%2Foidc%2Flogin%3Flogin_challenge%3Dtest", rec.Header().Get("Location"))
-	require.Equal(t, "login", metrics.flow)
-	require.Equal(t, "client_error", metrics.outcome)
-	require.Equal(t, "session_required", metrics.errorCode)
 }
 
 func TestLoginHandlerRedirectsWithReturnBaseURLOverride(t *testing.T) {
-	metrics := &challengeMetricsStub{}
 	handler := NewLoginHandler(LoginHandlerConfig{
 		Logger: zap.NewNop(),
 		Challenge: &challengeServiceStub{
@@ -249,7 +210,6 @@ func TestLoginHandlerRedirectsWithReturnBaseURLOverride(t *testing.T) {
 				return nil, challenge.NewSessionRequiredError(challengeID)
 			},
 		},
-		Metrics:          metrics,
 		KratosBrowserURL: "https://kratos.example/ory/kratos/public",
 		ReturnBaseURL:    "https://proxy.example/oidc/login",
 	})
@@ -263,13 +223,9 @@ func TestLoginHandlerRedirectsWithReturnBaseURLOverride(t *testing.T) {
 
 	require.Equal(t, http.StatusFound, rec.Code)
 	require.Equal(t, "https://kratos.example/ory/kratos/public/self-service/login/browser?return_to=https%3A%2F%2Fproxy.example%2Foidc%2Flogin%3Ffoo%3Dbar%26login_challenge%3Dtest", rec.Header().Get("Location"))
-	require.Equal(t, "login", metrics.flow)
-	require.Equal(t, "client_error", metrics.outcome)
-	require.Equal(t, "session_required", metrics.errorCode)
 }
 
 func TestLoginHandlerRedirectsToKratosLoginWithLoopbackHost(t *testing.T) {
-	metrics := &challengeMetricsStub{}
 	handler := NewLoginHandler(LoginHandlerConfig{
 		Logger: zap.NewNop(),
 		Challenge: &challengeServiceStub{
@@ -277,7 +233,6 @@ func TestLoginHandlerRedirectsToKratosLoginWithLoopbackHost(t *testing.T) {
 				return nil, challenge.NewSessionRequiredError(challengeID)
 			},
 		},
-		Metrics:          metrics,
 		KratosBrowserURL: "https://kratos.example/ory/kratos/public",
 	})
 
@@ -290,13 +245,9 @@ func TestLoginHandlerRedirectsToKratosLoginWithLoopbackHost(t *testing.T) {
 
 	require.Equal(t, http.StatusFound, rec.Code)
 	require.Equal(t, "https://kratos.example/ory/kratos/public/self-service/login/browser?return_to=https%3A%2F%2Fkratos.example%2Foidc%2Flogin%3Flogin_challenge%3Dtest", rec.Header().Get("Location"))
-	require.Equal(t, "login", metrics.flow)
-	require.Equal(t, "client_error", metrics.outcome)
-	require.Equal(t, "session_required", metrics.errorCode)
 }
 
 func TestLoginHandlerRedirectsToKratosLoginWithBrowserPathPrefix(t *testing.T) {
-	metrics := &challengeMetricsStub{}
 	handler := NewLoginHandler(LoginHandlerConfig{
 		Logger: zap.NewNop(),
 		Challenge: &challengeServiceStub{
@@ -304,7 +255,6 @@ func TestLoginHandlerRedirectsToKratosLoginWithBrowserPathPrefix(t *testing.T) {
 				return nil, challenge.NewSessionRequiredError(challengeID)
 			},
 		},
-		Metrics:          metrics,
 		KratosBrowserURL: "https://kratos.example/ory/kratos/public",
 	})
 
@@ -317,21 +267,6 @@ func TestLoginHandlerRedirectsToKratosLoginWithBrowserPathPrefix(t *testing.T) {
 
 	require.Equal(t, http.StatusFound, rec.Code)
 	require.Equal(t, "https://kratos.example/ory/kratos/public/self-service/login/browser?return_to=https%3A%2F%2Fapp.example%2Fv1%2Foidc%2Flogin%3Flogin_challenge%3Dtest", rec.Header().Get("Location"))
-	require.Equal(t, "login", metrics.flow)
-	require.Equal(t, "client_error", metrics.outcome)
-	require.Equal(t, "session_required", metrics.errorCode)
-}
-
-type challengeMetricsStub struct {
-	flow      string
-	outcome   string
-	errorCode string
-}
-
-func (s *challengeMetricsStub) ObserveChallenge(flow, outcome, errorCode string, _ time.Duration) {
-	s.flow = flow
-	s.outcome = outcome
-	s.errorCode = errorCode
 }
 
 type sessionResolverStub struct {

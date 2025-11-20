@@ -2,7 +2,7 @@
 
 ## Problem Statement
 
-The legacy NestJS server bundled OIDC controllers that tightly coupled Hydra, Kratos, and Alkemio platform concerns. We need a focused Go service that orchestrates Hydra login/consent flows, enforces maintenance controls, and exposes health/metrics endpoints while remaining aligned with the platform's spec-driven workflow.
+The legacy NestJS server bundled OIDC controllers that tightly coupled Hydra, Kratos, and Alkemio platform concerns. We need a focused Go service that orchestrates Hydra login/consent flows, enforces maintenance controls, and exposes health endpoints while remaining aligned with the platform's spec-driven workflow.
 
 ## Existing Landscape
 
@@ -16,7 +16,7 @@ The legacy NestJS server bundled OIDC controllers that tightly coupled Hydra, Kr
 1. What response schema do downstream consumers expect for login and consent endpoints? Answered by `contracts/openapi.yaml` – JSON payload with `redirect_to`, `remember`, and `remember_for` fields.
 2. How do we distinguish maintenance mode failures from Hydra/Kratos errors? Solution: dedicated maintenance middleware emitting `MAINTENANCE_MODE_ENABLED` error codes.
 3. What configuration surface is mandatory at bootstrap? Hydra admin URL, Kratos public URL, session cookie name, maintenance shared secret, timeout budgets.
-4. How are Prometheus metrics scraped in Kubernetes? ServiceMonitor objects in platform charts point to `/metrics`; we must expose default handler on configurable port.
+4. How do we observe production behaviour without Prometheus? Answer: rely on structured Zap logs with correlation IDs and log shipping via the platform's existing stack (decision ratified Nov 2025).
 
 ## Research Findings
 
@@ -29,7 +29,7 @@ The legacy NestJS server bundled OIDC controllers that tightly coupled Hydra, Kr
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| Hydra latency spikes | Login flow degradation | Add timeout + retry-with-backoff wrapper and expose metrics for p95 | 
+| Hydra latency spikes | Login flow degradation | Add timeout + retry-with-backoff wrapper and instrument structured logs for latency diagnostics |
 | Kratos cookie drift | Users locked out | Make session cookie name configurable and add unit tests covering overrides |
 | Maintenance toggle loss on pod restart | Unexpected traffic acceptance | Integrate optional persistent backing store in future; for now document restart procedure and include in runbook |
 | Spec drift between OpenAPI and handlers | Contract regressions | Enforce contract tests in CI and include spec updates in review checklist |
@@ -39,4 +39,4 @@ The legacy NestJS server bundled OIDC controllers that tightly coupled Hydra, Kr
 - ✅ Use chi router for lightweight HTTP handling.
 - ✅ Store configuration defaults in `configs/.env.example` and load via `envconfig`.
 - ✅ Keep maintenance toggle in-memory for MVP with audit logs to stdout.
-- ✅ Publish Prometheus metrics via `/metrics` using default registry.
+- ✅ Observability: rely on structured Zap logs; Prometheus metrics were removed in Nov 2025 to reduce operational surface area.

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"math"
 	"net/http"
@@ -14,7 +15,6 @@ import (
 	"github.com/alkem-io/oidc-service/internal/config"
 	"github.com/alkem-io/oidc-service/internal/maintenance"
 	middlewarepkg "github.com/alkem-io/oidc-service/internal/middleware"
-	"github.com/alkem-io/oidc-service/pkg/telemetry"
 )
 
 // Options bundles router dependencies.
@@ -22,7 +22,6 @@ type Options struct {
 	Logger             *zap.Logger
 	Maintenance        *maintenance.State
 	Challenge          challenge.Service
-	Metrics            telemetry.MetricsProvider
 	SessionResolver    SessionIdentityResolver
 	SessionCookie      string
 	KratosBrowserURL   string
@@ -40,10 +39,6 @@ func NewRouter(opts Options) http.Handler {
 	if opts.Challenge == nil {
 		opts.Challenge = challenge.NewStubService()
 	}
-	if opts.Metrics == nil {
-		opts.Metrics = telemetry.NewMetrics(telemetry.NewRegistry())
-	}
-
 	r := chi.NewRouter()
 	r.Use(chiMiddleware.RealIP)
 	r.Use(chiMiddleware.Recoverer)
@@ -51,8 +46,7 @@ func NewRouter(opts Options) http.Handler {
 	r.Use(
 		middlewarepkg.Maintenance(
 			middlewarepkg.MaintenanceOptions{
-				State:   opts.Maintenance,
-				Metrics: opts.Metrics,
+				State: opts.Maintenance,
 				Skip: func(r *http.Request) bool {
 					return r.URL.Path == "/health/live" || r.URL.Path == "/health/ready"
 				},
@@ -102,7 +96,6 @@ func NewRouter(opts Options) http.Handler {
 		LoginHandlerConfig{
 			Logger:           opts.Logger,
 			Challenge:        opts.Challenge,
-			Metrics:          opts.Metrics,
 			SessionResolver:  opts.SessionResolver,
 			SessionCookie:    opts.SessionCookie,
 			KratosBrowserURL: opts.KratosBrowserURL,
@@ -118,7 +111,7 @@ func NewRouter(opts Options) http.Handler {
 		)
 	}
 
-	consentHandler := NewConsentHandler(opts.Logger, opts.Challenge, opts.Metrics)
+	consentHandler := NewConsentHandler(opts.Logger, opts.Challenge)
 	for _, path := range []string{"/v1/oidc/consent", "/oidc/consent"} {
 		route := path
 		r.Get(
@@ -128,19 +121,21 @@ func NewRouter(opts Options) http.Handler {
 		)
 	}
 
-	r.Get(
-		"/metrics", func(w http.ResponseWriter, r *http.Request) {
-			opts.Metrics.Handler().ServeHTTP(w, r)
-		},
-	)
-
 	return r
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(payload); err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(payload)
+	_, _ = w.Write(buf.Bytes())
 }
 
 func retryAfterHeader(state config.MaintenanceState) string {

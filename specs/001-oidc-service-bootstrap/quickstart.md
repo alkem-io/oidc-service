@@ -83,12 +83,11 @@ curl -X POST "http://localhost:8080/maintenance" \
 
 Subsequent login attempts will yield HTTP 503 with code `MAINTENANCE_MODE_ENABLED`.
 
-## 6. Health & Metrics
+## 6. Health Checks
 
 ```bash
 curl -s http://localhost:8080/health/live | jq
 curl -s http://localhost:8080/health/ready | jq
-curl -s http://localhost:8080/metrics | head -n 20
 ```
 
 ## 7. Run Tests
@@ -111,4 +110,4 @@ make dev-down
 - **INVALID_CHALLENGE**: Ensure you generated a fresh challenge via the Hydra login endpoint (`/oidc/login`).
 - **KRATOS_SESSION_INVALID**: Verify the session cookie is present and not expired (`/sessions/whoami`).
 - **Hydra 500 errors**: Check Hydra logs (`docker logs alkemio_dev_hydra`).
-- **Metrics missing**: Confirm `OIDC_METRICS_ENABLED=true` and scrape path `/metrics` exposed.
+- **Observability gaps**: Set `OIDC_LOG_LEVEL=debug` to capture structured logs when debugging; metrics were removed in Nov 2025.

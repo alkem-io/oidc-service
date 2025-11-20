@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -44,10 +43,4 @@ func assignLevel(level string, atom *zap.AtomicLevel) error {
 		return fmt.Errorf("invalid log level: %s", level)
 	}
 	return nil
-}
-
-// NewRegistry creates a Prometheus registry with standard collectors disabled by default.
-func NewRegistry() *prometheus.Registry {
-	reg := prometheus.NewRegistry()
-	return reg
 }

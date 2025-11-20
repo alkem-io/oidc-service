@@ -2,6 +2,7 @@ package challenge
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -14,11 +15,11 @@ type hydraOAuth2Client struct {
 }
 
 // NewHydraOAuth2Client wraps the provided Hydra OAuth2 API implementation.
-func NewHydraOAuth2Client(api hydraAdmin.OAuth2API) HydraClient {
+func NewHydraOAuth2Client(api hydraAdmin.OAuth2API) (HydraClient, error) {
 	if api == nil {
-		panic("hydra oauth2 api is required")
+		return nil, errors.New("hydra oauth2 api is required")
 	}
-	return &hydraOAuth2Client{api: api}
+	return &hydraOAuth2Client{api: api}, nil
 }
 
 func (c *hydraOAuth2Client) GetLoginRequest(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2LoginRequest, *http.Response, error) {

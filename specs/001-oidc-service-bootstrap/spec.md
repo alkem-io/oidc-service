@@ -70,7 +70,7 @@ Platform SREs must observe health and toggle emergency maintenance mode without 
 - **FR-004**: System MUST resolve Kratos sessions using the configured cookie name without reading `os.Getenv` outside bootstrap.
 - **FR-005**: System MUST provide `/health/live` and `/health/ready` endpoints returning JSON objects aligned with the OpenAPI schema.
 - **FR-006**: System MUST expose `/maintenance` management endpoints protected by shared secret and toggle request short-circuiting.
-- **FR-007**: System MUST emit structured logs and Prometheus metrics for every public endpoint invocation.
+- **FR-007**: System MUST emit structured Zap logs (with request and challenge IDs) for every public endpoint invocation. Prometheus metrics were intentionally removed in Nov 2025 to simplify operations, so logging is the mandated observability signal.
 - **FR-008**: System MUST maintain OpenAPI 3.1 contract files under `contracts/` and keep contract tests green.
 
 ### Key Entities
@@ -81,9 +81,9 @@ Platform SREs must observe health and toggle emergency maintenance mode without 
 
 ## Success Criteria *(mandatory)*
 
-### Measurable Outcomes
+### Outcomes & Signals
 
-- **SC-001**: 99% of Hydra login requests complete in under 500 ms at p95 with Hydra reachable.
-- **SC-002**: Maintenance toggles propagate within 100 ms and block subsequent login requests immediately.
+- **SC-001**: Hydra login requests respect the configured timeout budget and emit structured logs capturing Hydra/Kratos latency so that upstream issues can be diagnosed.
+- **SC-002**: Maintenance toggles short-circuit subsequent login/consent requests without invoking Hydra/Kratos, and readiness endpoints reflect the active maintenance state immediately.
 - **SC-003**: Contract tests in `test/contract` remain green on every CI run.
 - **SC-004**: Health readiness endpoint accurately reports dependency degradation within one polling interval (≤10 seconds).

@@ -39,7 +39,7 @@
 
 ### Observability
 
-- **Decision**: Emit structured logs and metrics for resolution attempts, categorized into success, not-found, and failure, including correlation identifiers but avoiding full IDs where not necessary.
+- **Decision**: Emit structured logs only for resolution attempts, categorized into success, not-found, and failure, including correlation identifiers while avoiding full IDs where not necessary.
 - **Rationale**: Supports SC-003 without leaking sensitive identifiers and aligns with the observability principle.
 - **Alternatives considered**:
 - Log only failures (rejected: harder to understand baseline behavior and success rate).

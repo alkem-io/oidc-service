@@ -14,6 +14,7 @@ type IdentityHintProvider interface {
 
 type identityHintFunc func(context.Context) (string, error)
 
+// IdentityHint proxies the call to the wrapped function.
 func (f identityHintFunc) IdentityHint(ctx context.Context) (string, error) {
 	return f(ctx)
 }

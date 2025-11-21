@@ -1,0 +1,158 @@
+openapi: 3.0.3
+info:
+  title: Docstring Coverage Service (Internal)
+  version: 0.1.0
+  description: >-
+    Internal endpoints that expose docstring coverage snapshots, history, and
+    remediation targets for the OIDC service maintainers.
+servers:
+  - url: https://oidc-service.internal
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    CoverageSnapshot:
+      type: object
+      required: [snapshotId, generatedAt, overallCoverage, packages, threshold]
+      properties:
+        snapshotId:
+          type: string
+          format: uuid
+        generatedAt:
+          type: string
+          format: date-time
+        overallCoverage:
+          type: number
+          format: float
+        threshold:
+          type: number
+          format: float
+          default: 80
+        totalExports:
+          type: integer
+          minimum: 0
+        documentedExports:
+          type: integer
+          minimum: 0
+        generatorVersion:
+          type: string
+        packages:
+          type: array
+          items:
+            $ref: '#/components/schemas/PackageSummary'
+    PackageSummary:
+      type: object
+      required: [path, coverage, documented, undocumented, critical]
+      properties:
+        path:
+          type: string
+        coverage:
+          type: number
+        documented:
+          type: integer
+        undocumented:
+          type: integer
+        critical:
+          type: boolean
+          default: true
+        ownershipTags:
+          type: array
+          items:
+            type: string
+        missingSymbols:
+          type: array
+          items:
+            $ref: '#/components/schemas/MissingSymbol'
+    MissingSymbol:
+      type: object
+      required: [symbol, kind, file, line, reason, status]
+      properties:
+        symbol:
+          type: string
+        kind:
+          type: string
+          enum: [func, method, type, var, const, package]
+        file:
+          type: string
+        line:
+          type: integer
+        reason:
+          type: string
+          enum: [missing, mismatched-prefix, short-description, formatting, todo-tag]
+        owner:
+          type: string
+        status:
+          type: string
+          enum: [new, assigned, in-progress, done]
+    TriggerResponse:
+      type: object
+      required: [snapshotId, status]
+      properties:
+        snapshotId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [queued, running]
+        estimatedCompletionSeconds:
+          type: integer
+paths:
+  /internal/coverage/docstrings:
+    get:
+      summary: Fetch latest docstring coverage snapshot
+      description: Returns the most recent coverage snapshot stored on the default branch.
+      responses:
+        '200':
+          description: Snapshot retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoverageSnapshot'
+        '401':
+          description: Missing or invalid bearer token
+        '503':
+          description: Snapshot unavailable while recalculation is running
+  /internal/coverage/docstrings/history:
+    get:
+      summary: Retrieve recent coverage history
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+          description: Number of snapshots to return (defaults to 10)
+      responses:
+        '200':
+          description: History ordered newest-first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CoverageSnapshot'
+        '401':
+          description: Missing or invalid bearer token
+  /internal/coverage/docstrings/recalculate:
+    post:
+      summary: Trigger an on-demand coverage recalculation
+      description: Queues a recalculation job; caller must hold maintainer role.
+      responses:
+        '202':
+          description: Job accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriggerResponse'
+        '401':
+          description: Missing or invalid bearer token
+        '429':
+          description: Recalculation already in progress
+        '503':
+          description: System in maintenance mode

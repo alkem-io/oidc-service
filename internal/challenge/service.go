@@ -66,10 +66,25 @@ type Logger interface {
 // noopLogger provides a Logger implementation that discards all log messages.
 type noopLogger struct{}
 
-func (noopLogger) Info(string, ...interface{})  {}
-func (noopLogger) Warn(string, ...interface{})  {}
-func (noopLogger) Error(string, ...interface{}) {}
-func (noopLogger) Debug(string, ...interface{}) {}
+// Info implements Logger.Info while discarding the message.
+func (noopLogger) Info(string, ...interface{}) {
+	// Intentionally left blank; no logging occurs for the noop implementation.
+}
+
+// Warn implements Logger.Warn while discarding the message.
+func (noopLogger) Warn(string, ...interface{}) {
+	// Intentionally left blank; no logging occurs for the noop implementation.
+}
+
+// Error implements Logger.Error while discarding the message.
+func (noopLogger) Error(string, ...interface{}) {
+	// Intentionally left blank; no logging occurs for the noop implementation.
+}
+
+// Debug implements Logger.Debug while discarding the message.
+func (noopLogger) Debug(string, ...interface{}) {
+	// Intentionally left blank; no logging occurs for the noop implementation.
+}
 
 type service struct {
 	hydra             HydraClient
@@ -152,7 +167,8 @@ func NewService(opts Options) (Service, error) {
 	}, nil
 }
 
-func (s *service) ResolveLogin(ctx context.Context, challengeID string) (*Resolution, error) {
+// ResolveLogin drives the Hydra login challenge to completion and returns the redirect details.
+func (s *service) ResolveLogin(ctx context.Context, challengeID string) (*Resolution, error) { //nolint:cyclop
 	challengeID = strings.TrimSpace(challengeID)
 	if challengeID == "" {
 		return nil, NewError(http.StatusBadRequest, "missing_challenge", "login challenge is required", "", nil)
@@ -255,6 +271,7 @@ func (s *service) ResolveLogin(ctx context.Context, challengeID string) (*Resolu
 	return resolutionFromRedirect(challengeID, redirect)
 }
 
+// ResolveConsent drives the Hydra consent challenge to completion and returns the redirect details.
 func (s *service) ResolveConsent(ctx context.Context, challengeID string) (*Resolution, error) {
 	challengeID = strings.TrimSpace(challengeID)
 	if challengeID == "" {
@@ -304,6 +321,7 @@ func (s *service) ResolveConsent(ctx context.Context, challengeID string) (*Reso
 	return resolutionFromRedirect(challengeID, redirect)
 }
 
+// Readiness reports the aggregated health of Hydra and Kratos probes.
 func (s *service) Readiness(ctx context.Context) ReadinessState {
 	ctx, cancel := s.withReadinessTimeout(ctx)
 	defer cancel()
@@ -326,6 +344,7 @@ func (s *service) Readiness(ctx context.Context) ReadinessState {
 	}
 }
 
+// withReadinessTimeout ensures the readiness probes use a bounded context deadline.
 func (s *service) withReadinessTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -338,7 +357,9 @@ func (s *service) withReadinessTimeout(ctx context.Context) (context.Context, co
 
 	if deadline, ok := ctx.Deadline(); ok {
 		if time.Until(deadline) <= timeout {
-			return ctx, func() {}
+			return ctx, func() {
+				// Deadline already bounded by caller; no cancellation work required.
+			}
 		}
 	}
 

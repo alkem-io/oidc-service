@@ -272,6 +272,7 @@ type temporaryError struct {
 	err error
 }
 
+// Error surfaces the wrapped temporary error message, falling back to a default label.
 func (e *temporaryError) Error() string {
 	if e == nil || e.err == nil {
 		return "temporary error"
@@ -279,6 +280,7 @@ func (e *temporaryError) Error() string {
 	return e.err.Error()
 }
 
+// Unwrap exposes the underlying error so retry helpers can inspect it.
 func (e *temporaryError) Unwrap() error {
 	if e == nil {
 		return nil

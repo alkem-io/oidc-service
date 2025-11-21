@@ -15,18 +15,22 @@ func NewZapLoggerAdapter(logger *zap.Logger) Logger {
 	return &zapLoggerAdapter{logger: logger}
 }
 
+// Info forwards structured info logs to the underlying zap logger.
 func (z *zapLoggerAdapter) Info(msg string, fields ...interface{}) {
 	z.logger.Info(msg, z.convertFields(fields...)...)
 }
 
+// Warn forwards structured warning logs to the underlying zap logger.
 func (z *zapLoggerAdapter) Warn(msg string, fields ...interface{}) {
 	z.logger.Warn(msg, z.convertFields(fields...)...)
 }
 
+// Error forwards structured error logs to the underlying zap logger.
 func (z *zapLoggerAdapter) Error(msg string, fields ...interface{}) {
 	z.logger.Error(msg, z.convertFields(fields...)...)
 }
 
+// Debug forwards structured debug logs to the underlying zap logger.
 func (z *zapLoggerAdapter) Debug(msg string, fields ...interface{}) {
 	z.logger.Debug(msg, z.convertFields(fields...)...)
 }

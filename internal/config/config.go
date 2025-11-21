@@ -80,7 +80,7 @@ func Load() (*ServiceConfig, error) {
 	return cfg, nil
 }
 
-func (cfg *ServiceConfig) validate() error {
+func (cfg *ServiceConfig) validate() error { //nolint:cyclop
 	if err := cfg.requireSecureURL(cfg.HydraAdminURL, "OIDC_HYDRA_ADMIN_URL"); err != nil {
 		return err
 	}

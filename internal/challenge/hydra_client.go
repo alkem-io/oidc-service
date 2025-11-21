@@ -22,11 +22,13 @@ func NewHydraOAuth2Client(api hydraAdmin.OAuth2API) (HydraClient, error) {
 	return &hydraOAuth2Client{api: api}, nil
 }
 
+// GetLoginRequest fetches the login challenge metadata from Hydra.
 func (c *hydraOAuth2Client) GetLoginRequest(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2LoginRequest, *http.Response, error) {
 	req := c.api.GetOAuth2LoginRequest(ctx).LoginChallenge(challengeID)
 	return req.Execute()
 }
 
+// AcceptLoginRequest finalizes the login challenge with the supplied payload.
 func (c *hydraOAuth2Client) AcceptLoginRequest(ctx context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2LoginRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
 	if body == nil {
 		return nil, nil, fmt.Errorf("accept login request body is required")
@@ -35,11 +37,13 @@ func (c *hydraOAuth2Client) AcceptLoginRequest(ctx context.Context, challengeID 
 	return req.Execute()
 }
 
+// GetConsentRequest fetches the consent challenge metadata from Hydra.
 func (c *hydraOAuth2Client) GetConsentRequest(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
 	req := c.api.GetOAuth2ConsentRequest(ctx).ConsentChallenge(challengeID)
 	return req.Execute()
 }
 
+// AcceptConsentRequest finalizes the consent challenge with the supplied payload.
 func (c *hydraOAuth2Client) AcceptConsentRequest(ctx context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
 	if body == nil {
 		return nil, nil, fmt.Errorf("accept consent request body is required")

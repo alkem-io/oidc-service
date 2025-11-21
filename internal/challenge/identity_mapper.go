@@ -49,6 +49,7 @@ type MissingTraitsError struct {
 	Traits []string
 }
 
+// Error satisfies the error interface for MissingTraitsError.
 func (e *MissingTraitsError) Error() string {
 	return fmt.Sprintf("missing required traits: %s", strings.Join(e.Traits, ", "))
 }
@@ -58,6 +59,7 @@ type IdentityNotFoundError struct {
 	IdentityID string
 }
 
+// Error satisfies the error interface for IdentityNotFoundError.
 func (e *IdentityNotFoundError) Error() string {
 	return fmt.Sprintf("kratos identity %q not found", e.IdentityID)
 }
@@ -67,10 +69,12 @@ type IdentityLookupError struct {
 	Err error
 }
 
+// Error satisfies the error interface for IdentityLookupError.
 func (e *IdentityLookupError) Error() string {
 	return fmt.Sprintf("kratos identity lookup failed: %v", e.Err)
 }
 
+// Unwrap exposes the underlying lookup error for errors.Is/As support.
 func (e *IdentityLookupError) Unwrap() error {
 	return e.Err
 }

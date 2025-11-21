@@ -15,14 +15,17 @@ func NewStubService() Service {
 
 type stubService struct{}
 
+// ResolveLogin returns deterministic responses for login flows in stub mode.
 func (s *stubService) ResolveLogin(ctx context.Context, challengeID string) (*Resolution, error) {
 	return s.resolve(ctx, "login", challengeID)
 }
 
+// ResolveConsent returns deterministic responses for consent flows in stub mode.
 func (s *stubService) ResolveConsent(ctx context.Context, challengeID string) (*Resolution, error) {
 	return s.resolve(ctx, "consent", challengeID)
 }
 
+// Readiness reports synthetic health data for the stub implementation.
 func (s *stubService) Readiness(ctx context.Context) ReadinessState {
 	return ReadinessState{
 		Status:  "ready",

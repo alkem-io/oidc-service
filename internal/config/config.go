@@ -80,8 +80,6 @@ func Load() (*ServiceConfig, error) {
 	return cfg, nil
 }
 
-// LoadDocstringCoverage reads coverage-specific configuration settings.
-
 func (cfg *ServiceConfig) validate() error { //nolint:cyclop
 	if err := cfg.requireSecureURL(cfg.HydraAdminURL, "OIDC_HYDRA_ADMIN_URL"); err != nil {
 		return err

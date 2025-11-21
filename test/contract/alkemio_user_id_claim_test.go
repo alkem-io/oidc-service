@@ -6,18 +6,26 @@ import (
 	"testing"
 
 	hydraAdmin "github.com/ory/hydra-client-go/v2"
+	"github.com/stretchr/testify/require"
 
 	"github.com/alkem-io/oidc-service/internal/alkemio"
 	"github.com/alkem-io/oidc-service/internal/challenge"
 	testsupport "github.com/alkem-io/oidc-service/test/support"
 )
 
+const (
+	contractKratosID         = "a9b6d4c2-68c2-4c60-920e-0f2b77e9c123"
+	contractUserID           = "cb658e61-0901-46b7-b1ce-91b6ec1345af"
+	contractAgentID          = "2c1c9b1f-b6e5-4c42-bc6c-4a4c934e6712"
+	contractConsentChallenge = "consent-test"
+)
+
 func TestConsentAddsAlkemioUserIDClaim(t *testing.T) {
 	t.Parallel()
 
-	consent := hydraAdmin.NewOAuth2ConsentRequest("consent-test")
-	consent.SetSubject("kratos-identity")
-	consent.SetContext(map[string]any{"identity_id": "kratos-identity"})
+	consent := hydraAdmin.NewOAuth2ConsentRequest(contractConsentChallenge)
+	consent.SetSubject(contractKratosID)
+	consent.SetContext(map[string]any{"identity_id": contractKratosID})
 
 	var (
 		capturedAccess map[string]any
@@ -26,9 +34,7 @@ func TestConsentAddsAlkemioUserIDClaim(t *testing.T) {
 
 	hydraStub := &testsupport.HydraClientStub{
 		GetConsentFunc: func(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
-			if challengeID != "consent-test" {
-				t.Fatalf("unexpected challenge id: %s", challengeID)
-			}
+			require.Equal(t, contractConsentChallenge, challengeID, "unexpected challenge id")
 			return consent, &http.Response{StatusCode: http.StatusOK}, nil
 		},
 		AcceptConsentFunc: func(ctx context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
@@ -49,9 +55,7 @@ func TestConsentAddsAlkemioUserIDClaim(t *testing.T) {
 
 	identityStub := testsupport.IdentityFetcherStub{
 		FetchFunc: func(ctx context.Context, identityID string) (*challenge.IdentityProfile, error) {
-			if identityID != "kratos-identity" {
-				t.Fatalf("unexpected identity id: %s", identityID)
-			}
+			require.Equal(t, contractKratosID, identityID, "unexpected identity id")
 			return &challenge.IdentityProfile{
 				ID:          identityID,
 				Email:       "user@example.com",
@@ -61,11 +65,9 @@ func TestConsentAddsAlkemioUserIDClaim(t *testing.T) {
 	}
 
 	resolverStub := testsupport.AlkemioResolverStub{
-		ResolveFunc: func(ctx context.Context, authenticationID string) (string, error) {
-			if authenticationID != "kratos-identity" {
-				t.Fatalf("unexpected authentication id: %s", authenticationID)
-			}
-			return "alkemio-user-123", nil
+		ResolveFunc: func(ctx context.Context, authenticationID string) (*alkemio.IdentityMapping, error) {
+			require.Equal(t, contractKratosID, authenticationID, "unexpected authentication id")
+			return testsupport.NewAlkemioMapping(contractUserID, contractAgentID), nil
 		},
 	}
 
@@ -82,26 +84,19 @@ func TestConsentAddsAlkemioUserIDClaim(t *testing.T) {
 		t.Fatalf("resolve consent: %v", err)
 	}
 
-	if capturedAccess == nil {
-		t.Fatal("access token claims not captured")
-	}
-	if capturedID == nil {
-		t.Fatal("id token claims not captured")
-	}
-
-	if claim, ok := capturedAccess["alkemio_user_id"].(string); !ok || claim != "alkemio-user-123" {
-		t.Fatalf("access token missing alkemio_user_id claim: %v", capturedAccess)
-	}
-	if claim, ok := capturedID["alkemio_user_id"].(string); !ok || claim != "alkemio-user-123" {
-		t.Fatalf("id token missing alkemio_user_id claim: %v", capturedID)
-	}
+	require.NotNil(t, capturedAccess, "access token claims not captured")
+	require.NotNil(t, capturedID, "id token claims not captured")
+	requireStringClaim(t, capturedAccess, "alkemio_user_id", contractUserID)
+	requireStringClaim(t, capturedAccess, "agent_id", contractAgentID)
+	requireStringClaim(t, capturedID, "alkemio_user_id", contractUserID)
+	requireStringClaim(t, capturedID, "agent_id", contractAgentID)
 }
 
 func TestConsentFailsWhenAlkemioIdentityMissing(t *testing.T) {
 	t.Parallel()
 
 	consent := hydraAdmin.NewOAuth2ConsentRequest("consent-missing")
-	consent.SetSubject("kratos-identity")
+	consent.SetSubject(contractKratosID)
 
 	hydraStub := &testsupport.HydraClientStub{
 		GetConsentFunc: func(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
@@ -124,8 +119,8 @@ func TestConsentFailsWhenAlkemioIdentityMissing(t *testing.T) {
 	}
 
 	resolverStub := testsupport.AlkemioResolverStub{
-		ResolveFunc: func(ctx context.Context, authenticationID string) (string, error) {
-			return "", alkemio.ErrNotFound
+		ResolveFunc: func(ctx context.Context, authenticationID string) (*alkemio.IdentityMapping, error) {
+			return nil, alkemio.ErrNotFound
 		},
 	}
 
@@ -153,4 +148,11 @@ func TestConsentFailsWhenAlkemioIdentityMissing(t *testing.T) {
 	if challengeErr.StatusCode() != http.StatusForbidden {
 		t.Fatalf("unexpected status code: %d", challengeErr.StatusCode())
 	}
+}
+
+func requireStringClaim(t *testing.T, claims map[string]any, key, expected string) {
+	t.Helper()
+	value, ok := claims[key].(string)
+	require.True(t, ok, "claim %s missing", key)
+	require.Equal(t, expected, value, "unexpected claim value for %s", key)
 }

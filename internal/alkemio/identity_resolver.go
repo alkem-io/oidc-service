@@ -34,7 +34,13 @@ type Config struct {
 	Client      HTTPDoer
 }
 
-// IdentityResolver resolves Alkemio user IDs from Kratos authentication IDs.
+// IdentityMapping captures the Alkemio user and agent identifiers associated with a Kratos identity.
+type IdentityMapping struct {
+	UserID  string
+	AgentID string
+}
+
+// IdentityResolver resolves Alkemio user and agent IDs from Kratos authentication IDs.
 type IdentityResolver struct {
 	client     HTTPDoer
 	resolveURL string
@@ -90,18 +96,18 @@ func NewIdentityResolver(cfg Config) (*IdentityResolver, error) {
 	}, nil
 }
 
-// Resolve returns the Alkemio user ID for the provided Kratos authentication ID.
-func (r *IdentityResolver) Resolve(ctx context.Context, authenticationID string) (string, error) {
+// Resolve returns the Alkemio identity mapping for the provided Kratos authentication ID.
+func (r *IdentityResolver) Resolve(ctx context.Context, authenticationID string) (*IdentityMapping, error) {
 	if r == nil {
-		return "", errors.New("identity resolver is nil")
+		return nil, errors.New("identity resolver is nil")
 	}
 
 	id := strings.TrimSpace(authenticationID)
 	if id == "" {
-		return "", errors.New("authentication id is required")
+		return nil, errors.New("authentication id is required")
 	}
 	if !isUUID(id) {
-		return "", fmt.Errorf("authentication id must be a valid uuid")
+		return nil, fmt.Errorf("authentication id must be a valid uuid")
 	}
 
 	ctx, cancel := r.withTimeout(ctx)
@@ -114,19 +120,19 @@ func (r *IdentityResolver) Resolve(ctx context.Context, authenticationID string)
 
 	var lastErr error
 	for attempt := 1; attempt <= attempts; attempt++ {
-		userID, err := r.resolveOnce(ctx, id)
+		mapping, err := r.resolveOnce(ctx, id)
 
 		if err == nil {
-			return userID, nil
+			return mapping, nil
 		}
 
 		if errors.Is(err, ErrNotFound) {
-			return "", err
+			return nil, err
 		}
 
 		lastErr = err
 		if ctx.Err() != nil {
-			return "", ctx.Err()
+			return nil, ctx.Err()
 		}
 
 		if attempt == attempts || !isTemporary(err) {
@@ -134,30 +140,30 @@ func (r *IdentityResolver) Resolve(ctx context.Context, authenticationID string)
 		}
 
 		if err := r.wait(ctx, attempt); err != nil {
-			return "", err
+			return nil, err
 		}
 	}
 
 	if lastErr != nil {
-		return "", lastErr
+		return nil, lastErr
 	}
 
 	if ctx.Err() != nil {
-		return "", ctx.Err()
+		return nil, ctx.Err()
 	}
 
-	return "", errors.New("identity resolution failed")
+	return nil, errors.New("identity resolution failed")
 }
 
-func (r *IdentityResolver) resolveOnce(ctx context.Context, authenticationID string) (string, error) {
+func (r *IdentityResolver) resolveOnce(ctx context.Context, authenticationID string) (*IdentityMapping, error) {
 	body, err := json.Marshal(map[string]string{"authenticationId": authenticationID})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, r.resolveURL, bytes.NewReader(body))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
@@ -165,9 +171,9 @@ func (r *IdentityResolver) resolveOnce(ctx context.Context, authenticationID str
 	resp, err := r.client.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
-			return "", ctx.Err()
+			return nil, ctx.Err()
 		}
-		return "", &temporaryError{err: err}
+		return nil, &temporaryError{err: err}
 	}
 	defer func() {
 		_ = resp.Body.Close()
@@ -175,29 +181,38 @@ func (r *IdentityResolver) resolveOnce(ctx context.Context, authenticationID str
 
 	switch {
 	case resp.StatusCode == http.StatusNotFound:
-		return "", ErrNotFound
+		return nil, ErrNotFound
 	case resp.StatusCode >= 500:
-		return "", &temporaryError{err: fmt.Errorf("alkemio server returned status %d", resp.StatusCode)}
+		return nil, &temporaryError{err: fmt.Errorf("alkemio server returned status %d", resp.StatusCode)}
 	case resp.StatusCode >= 400:
-		return "", fmt.Errorf("alkemio server returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("alkemio server returned status %d", resp.StatusCode)
 	}
 
 	var payload struct {
-		UserID string `json:"userId"`
+		UserID  string `json:"userId"`
+		AgentID string `json:"agentId"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return "", &temporaryError{err: fmt.Errorf("decode response: %w", err)}
+		return nil, &temporaryError{err: fmt.Errorf("decode response: %w", err)}
 	}
 
 	userID := strings.TrimSpace(payload.UserID)
 	if userID == "" {
-		return "", fmt.Errorf("alkemio response missing userId")
+		return nil, fmt.Errorf("alkemio response missing userId")
 	}
 	if !isUUID(userID) {
-		return "", fmt.Errorf("alkemio response userId must be a valid uuid")
+		return nil, fmt.Errorf("alkemio response userId must be a valid uuid")
 	}
 
-	return userID, nil
+	agentID := strings.TrimSpace(payload.AgentID)
+	if agentID == "" {
+		return nil, fmt.Errorf("alkemio response missing agentId")
+	}
+	if !isUUID(agentID) {
+		return nil, fmt.Errorf("alkemio response agentId must be a valid uuid")
+	}
+
+	return &IdentityMapping{UserID: userID, AgentID: agentID}, nil
 }
 
 func (r *IdentityResolver) wait(ctx context.Context, attempt int) error {

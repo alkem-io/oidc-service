@@ -1,14 +1,20 @@
 package contract_test
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
+	"github.com/alkem-io/oidc-service/internal/alkemio"
+	"github.com/alkem-io/oidc-service/internal/challenge"
 	"github.com/alkem-io/oidc-service/internal/config"
 	"github.com/alkem-io/oidc-service/internal/maintenance"
 	"github.com/alkem-io/oidc-service/internal/server"
 	testsupport "github.com/alkem-io/oidc-service/test/support"
+	hydraAdmin "github.com/ory/hydra-client-go/v2"
 	"go.uber.org/zap"
 )
 
@@ -60,4 +66,52 @@ func TestAccessTokenClaimsContract(t *testing.T) {
 			},
 		)
 	}
+}
+
+func TestAccessTokenClaimsIncludeAgentID(t *testing.T) {
+	t.Parallel()
+
+	const challengeID = "access-token-agent-claims"
+	consent := hydraAdmin.NewOAuth2ConsentRequest(challengeID)
+	consent.SetSubject(contractKratosID)
+	consent.SetContext(map[string]any{"identity_id": contractKratosID})
+
+	var capturedAccess map[string]any
+
+	hydraStub := &testsupport.HydraClientStub{
+		GetConsentFunc: func(ctx context.Context, requested string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
+			require.Equal(t, challengeID, requested)
+			return consent, &http.Response{StatusCode: http.StatusOK}, nil
+		},
+		AcceptConsentFunc: func(ctx context.Context, requested string, body *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
+			require.Equal(t, challengeID, requested)
+			session := body.GetSession()
+			if claims, ok := session.GetAccessToken().(map[string]any); ok {
+				capturedAccess = claims
+			}
+			return hydraAdmin.NewOAuth2RedirectTo("https://app.example/callback"), &http.Response{StatusCode: http.StatusOK}, nil
+		},
+	}
+
+	identityStub := testsupport.IdentityFetcherStub{
+		FetchFunc: func(ctx context.Context, identityID string) (*challenge.IdentityProfile, error) {
+			require.Equal(t, contractKratosID, identityID)
+			return &challenge.IdentityProfile{ID: identityID, Email: "user@example.com"}, nil
+		},
+	}
+
+	resolverStub := testsupport.AlkemioResolverStub{
+		ResolveFunc: func(ctx context.Context, authenticationID string) (*alkemio.IdentityMapping, error) {
+			require.Equal(t, contractKratosID, authenticationID)
+			return testsupport.NewAlkemioMapping(contractUserID, contractAgentID), nil
+		},
+	}
+
+	svc, err := challenge.NewService(challenge.Options{Hydra: hydraStub, Identity: identityStub, Alkemio: resolverStub})
+	require.NoError(t, err)
+
+	_, err = svc.ResolveConsent(context.Background(), challengeID)
+	require.NoError(t, err)
+	require.NotNil(t, capturedAccess, "access token claims not captured")
+	require.Equal(t, contractAgentID, capturedAccess["agent_id"])
 }

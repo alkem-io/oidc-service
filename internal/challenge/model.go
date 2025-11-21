@@ -42,16 +42,17 @@ type IdentityProfile struct {
 
 // TokenClaims holds the enhanced claim fields to be included in tokens.
 type TokenClaims struct {
-	GivenName     *string `json:"given_name,omitempty"`
-	FamilyName    *string `json:"family_name,omitempty"`
-	EmailVerified *bool   `json:"email_verified,omitempty"`
-	AcceptedTerms *bool   `json:"accepted_terms,omitempty"`
-	AlkemioUserID *string `json:"alkemio_user_id,omitempty"`
+	GivenName      *string `json:"given_name,omitempty"`
+	FamilyName     *string `json:"family_name,omitempty"`
+	EmailVerified  *bool   `json:"email_verified,omitempty"`
+	AcceptedTerms  *bool   `json:"accepted_terms,omitempty"`
+	AlkemioUserID  *string `json:"alkemio_user_id,omitempty"`
+	AlkemioAgentID *string `json:"agent_id,omitempty"`
 }
 
 // IsEmpty returns true if no claims are set.
 func (tc *TokenClaims) IsEmpty() bool {
-	return tc.GivenName == nil && tc.FamilyName == nil && tc.EmailVerified == nil && tc.AcceptedTerms == nil && tc.AlkemioUserID == nil
+	return tc.GivenName == nil && tc.FamilyName == nil && tc.EmailVerified == nil && tc.AcceptedTerms == nil && tc.AlkemioUserID == nil && tc.AlkemioAgentID == nil
 }
 
 // ToAccessTokenMap converts claims appropriate for Access tokens to a map.
@@ -65,6 +66,9 @@ func (tc *TokenClaims) ToAccessTokenMap() map[string]any {
 	}
 	if tc.AlkemioUserID != nil {
 		claims["alkemio_user_id"] = *tc.AlkemioUserID
+	}
+	if tc.AlkemioAgentID != nil {
+		claims["agent_id"] = *tc.AlkemioAgentID
 	}
 	return claims
 }
@@ -86,6 +90,9 @@ func (tc *TokenClaims) ToIDTokenMap() map[string]any {
 	}
 	if tc.AlkemioUserID != nil {
 		claims["alkemio_user_id"] = *tc.AlkemioUserID
+	}
+	if tc.AlkemioAgentID != nil {
+		claims["agent_id"] = *tc.AlkemioAgentID
 	}
 	return claims
 }

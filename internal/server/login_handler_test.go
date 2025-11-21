@@ -12,6 +12,15 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	defaultLoginChallengePath = "/v1/oidc/login?login_challenge=test"
+	forwardedProtoHeader      = "X-Forwarded-Proto"
+	forwardedPrefixHeader     = "X-Forwarded-Prefix"
+	appExampleHost            = "app.example"
+	kratosBrowserPublicURL    = "https://kratos.example/ory/kratos/public"
+	forwardedPrefixValue      = "/ory/kratos/public"
+)
+
 func TestLoginHandlerRedirectsOnSuccess(t *testing.T) {
 	svc := &challengeServiceStub{
 		resolveLogin: func(ctx context.Context, challengeID string) (*challenge.Resolution, error) {
@@ -76,6 +85,51 @@ func TestLoginHandlerPropagatesServiceError(t *testing.T) {
 	require.Equal(t, "invalid_challenge", payload["error"])
 }
 
+func TestLoginHandlerReturnsAlkemioErrors(t *testing.T) {
+	testCases := []struct {
+		name       string
+		errorFn    func(challengeID string) challenge.Error
+		statusCode int
+		code       string
+	}{
+		{
+			name:       "IdentityMissing",
+			errorFn:    func(id string) challenge.Error { return challenge.NewAlkemioIdentityMissingError(id) },
+			statusCode: http.StatusForbidden,
+			code:       "alkemio_identity_missing",
+		},
+		{
+			name:       "ResolutionFailed",
+			errorFn:    func(id string) challenge.Error { return challenge.NewAlkemioResolutionError(id, "resolution failed") },
+			statusCode: http.StatusBadGateway,
+			code:       "alkemio_resolution_failed",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &challengeServiceStub{
+				resolveLogin: func(ctx context.Context, challengeID string) (*challenge.Resolution, error) {
+					return nil, tc.errorFn(challengeID)
+				},
+			}
+
+			handler := NewLoginHandler(LoginHandlerConfig{Logger: zap.NewNop(), Challenge: svc})
+
+			req := httptest.NewRequest(http.MethodGet, "/v1/oidc/login?login_challenge=alkemio", nil)
+			rec := httptest.NewRecorder()
+
+			handler.Handle(rec, req)
+
+			require.Equal(t, tc.statusCode, rec.Code)
+
+			var payload map[string]any
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
+			require.Equal(t, tc.code, payload["error"])
+		})
+	}
+}
+
 func TestLoginHandlerProvidesSessionHint(t *testing.T) {
 	var resolverCalled bool
 	handler := NewLoginHandler(LoginHandlerConfig{
@@ -97,7 +151,7 @@ func TestLoginHandlerProvidesSessionHint(t *testing.T) {
 		}},
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/oidc/login?login_challenge=test", nil)
+	req := httptest.NewRequest(http.MethodGet, defaultLoginChallengePath, nil)
 	req.AddCookie(&http.Cookie{Name: "ory_kratos_session", Value: "session-token"})
 	rec := httptest.NewRecorder()
 
@@ -123,7 +177,7 @@ func TestLoginHandlerMissingSessionCreatesHintProvider(t *testing.T) {
 		SessionResolver: sessionResolverStub{},
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/oidc/login?login_challenge=test", nil)
+	req := httptest.NewRequest(http.MethodGet, defaultLoginChallengePath, nil)
 	rec := httptest.NewRecorder()
 
 	handler.Handle(rec, req)
@@ -146,9 +200,9 @@ func TestLoginHandlerRedirectsToKratosLoginWhenSessionRequired(t *testing.T) {
 		KratosBrowserURL: "https://kratos.example",
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/oidc/login?login_challenge=test", nil)
-	req.Host = "app.example"
-	req.Header.Set("X-Forwarded-Proto", "https")
+	req := httptest.NewRequest(http.MethodGet, defaultLoginChallengePath, nil)
+	req.Host = appExampleHost
+	req.Header.Set(forwardedProtoHeader, "https")
 	rec := httptest.NewRecorder()
 
 	handler.Handle(rec, req)
@@ -168,9 +222,9 @@ func TestLoginHandlerRedirectsToKratosLoginWhenSessionInvalid(t *testing.T) {
 		KratosBrowserURL: "https://kratos.example",
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/oidc/login?login_challenge=test", nil)
-	req.Host = "app.example"
-	req.Header.Set("X-Forwarded-Proto", "https")
+	req := httptest.NewRequest(http.MethodGet, defaultLoginChallengePath, nil)
+	req.Host = appExampleHost
+	req.Header.Set(forwardedProtoHeader, "https")
 	rec := httptest.NewRecorder()
 
 	handler.Handle(rec, req)
@@ -187,19 +241,20 @@ func TestLoginHandlerRedirectsToKratosLoginWithForwardedPrefix(t *testing.T) {
 				return nil, challenge.NewSessionRequiredError(challengeID)
 			},
 		},
-		KratosBrowserURL: "https://kratos.example/ory/kratos/public",
+		KratosBrowserURL: kratosBrowserPublicURL,
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/oidc/login?login_challenge=test", nil)
-	req.Host = "app.example"
-	req.Header.Set("X-Forwarded-Proto", "https")
-	req.Header.Set("X-Forwarded-Prefix", "/ory/kratos/public")
+	req := httptest.NewRequest(http.MethodGet, defaultLoginChallengePath, nil)
+	req.Host = appExampleHost
+	req.Header.Set(forwardedProtoHeader, "https")
+	req.Header.Set(forwardedPrefixHeader, forwardedPrefixValue)
 	rec := httptest.NewRecorder()
 
 	handler.Handle(rec, req)
 
 	require.Equal(t, http.StatusFound, rec.Code)
-	require.Equal(t, "https://kratos.example/ory/kratos/public/self-service/login/browser?return_to=https%3A%2F%2Fapp.example%2Fory%2Fkratos%2Fpublic%2Fv1%2Foidc%2Flogin%3Flogin_challenge%3Dtest", rec.Header().Get("Location"))
+	expected := kratosBrowserPublicURL + "/self-service/login/browser?return_to=https%3A%2F%2Fapp.example%2Fory%2Fkratos%2Fpublic%2Fv1%2Foidc%2Flogin%3Flogin_challenge%3Dtest"
+	require.Equal(t, expected, rec.Header().Get("Location"))
 }
 
 func TestLoginHandlerRedirectsWithReturnBaseURLOverride(t *testing.T) {
@@ -210,19 +265,20 @@ func TestLoginHandlerRedirectsWithReturnBaseURLOverride(t *testing.T) {
 				return nil, challenge.NewSessionRequiredError(challengeID)
 			},
 		},
-		KratosBrowserURL: "https://kratos.example/ory/kratos/public",
+		KratosBrowserURL: kratosBrowserPublicURL,
 		ReturnBaseURL:    "https://proxy.example/oidc/login",
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/oidc/login?login_challenge=test&foo=bar", nil)
 	req.Host = "internal.example"
-	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set(forwardedProtoHeader, "https")
 	rec := httptest.NewRecorder()
 
 	handler.Handle(rec, req)
 
 	require.Equal(t, http.StatusFound, rec.Code)
-	require.Equal(t, "https://kratos.example/ory/kratos/public/self-service/login/browser?return_to=https%3A%2F%2Fproxy.example%2Foidc%2Flogin%3Ffoo%3Dbar%26login_challenge%3Dtest", rec.Header().Get("Location"))
+	expected := kratosBrowserPublicURL + "/self-service/login/browser?return_to=https%3A%2F%2Fproxy.example%2Foidc%2Flogin%3Ffoo%3Dbar%26login_challenge%3Dtest"
+	require.Equal(t, expected, rec.Header().Get("Location"))
 }
 
 func TestLoginHandlerRedirectsToKratosLoginWithLoopbackHost(t *testing.T) {
@@ -233,7 +289,7 @@ func TestLoginHandlerRedirectsToKratosLoginWithLoopbackHost(t *testing.T) {
 				return nil, challenge.NewSessionRequiredError(challengeID)
 			},
 		},
-		KratosBrowserURL: "https://kratos.example/ory/kratos/public",
+		KratosBrowserURL: kratosBrowserPublicURL,
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/oidc/login?login_challenge=test", nil)
@@ -244,7 +300,8 @@ func TestLoginHandlerRedirectsToKratosLoginWithLoopbackHost(t *testing.T) {
 	handler.Handle(rec, req)
 
 	require.Equal(t, http.StatusFound, rec.Code)
-	require.Equal(t, "https://kratos.example/ory/kratos/public/self-service/login/browser?return_to=https%3A%2F%2Fkratos.example%2Foidc%2Flogin%3Flogin_challenge%3Dtest", rec.Header().Get("Location"))
+	expected := kratosBrowserPublicURL + "/self-service/login/browser?return_to=https%3A%2F%2Fkratos.example%2Foidc%2Flogin%3Flogin_challenge%3Dtest"
+	require.Equal(t, expected, rec.Header().Get("Location"))
 }
 
 func TestLoginHandlerRedirectsToKratosLoginWithBrowserPathPrefix(t *testing.T) {
@@ -255,18 +312,19 @@ func TestLoginHandlerRedirectsToKratosLoginWithBrowserPathPrefix(t *testing.T) {
 				return nil, challenge.NewSessionRequiredError(challengeID)
 			},
 		},
-		KratosBrowserURL: "https://kratos.example/ory/kratos/public",
+		KratosBrowserURL: kratosBrowserPublicURL,
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/oidc/login?login_challenge=test", nil)
-	req.Host = "app.example"
-	req.Header.Set("X-Forwarded-Proto", "https")
+	req := httptest.NewRequest(http.MethodGet, defaultLoginChallengePath, nil)
+	req.Host = appExampleHost
+	req.Header.Set(forwardedProtoHeader, "https")
 	rec := httptest.NewRecorder()
 
 	handler.Handle(rec, req)
 
 	require.Equal(t, http.StatusFound, rec.Code)
-	require.Equal(t, "https://kratos.example/ory/kratos/public/self-service/login/browser?return_to=https%3A%2F%2Fapp.example%2Fv1%2Foidc%2Flogin%3Flogin_challenge%3Dtest", rec.Header().Get("Location"))
+	expected := kratosBrowserPublicURL + "/self-service/login/browser?return_to=https%3A%2F%2Fapp.example%2Fv1%2Foidc%2Flogin%3Flogin_challenge%3Dtest"
+	require.Equal(t, expected, rec.Header().Get("Location"))
 }
 
 type sessionResolverStub struct {

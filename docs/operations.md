@@ -85,13 +85,19 @@ The service enhances OIDC tokens with user profile and compliance claims. Rely o
    - **Types**: Boolean values only, strings like "true"/"false" are parsed, invalid types cause omission
    - **Compliance**: Critical for legal compliance - monitor omission rates
 
+4. **Agent Identity** (`agent_id`):
+   - **Source**: Alkemio resolver `/rest/internal/identity/resolve` response (`agentId` field)
+   - **Tokens**: Both ID tokens and access tokens
+   - **Validation**: Must be a canonical UUID; missing/invalid values block consent/login resolution with `alkemio_resolution_failed`
+   - **Observability**: Success paths log `resolved alkemio identity mapping` with masked IDs; failures emit `failed to resolve alkemio identity mapping` or `received invalid alkemio identity mapping` entries
+
 ### Troubleshooting Token Claims
 
 1. **Missing Claims**:
    - Check Kratos identity data structure in admin API
    - Verify `traits.name.first`, `traits.name.last`, `traits.accepted_terms` fields
    - Validate `verifiable_addresses` array for email verification
-   - Review service logs for extraction errors with identity context
+   - Confirm the resolver returns both `userId` and `agentId`; review service logs for extraction/validation errors with identity context
 
 2. **Invalid UTF-8 Names**:
    - Service logs will show UTF-8 validation failures

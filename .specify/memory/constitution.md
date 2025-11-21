@@ -21,6 +21,8 @@
    - GitHub Actions pipelines run linting, unit tests, integration smoke, SBOM generation, and signed Docker pushes before releases.
 9. **Evidence-Based Performance Goals**
    - Do not invent ad-hoc SLAs (e.g., "p95 < 500 ms") for thin orchestration layers whose latency is dominated by external systems. Only codify performance targets when the service owns the bottleneck and can meaningfully improve it; otherwise focus on timeout budgets, dependency health checks, and log-based diagnostics.
+10. **Meaningful Success Criteria**
+   - Specifications must express success criteria that are directly testable within oidc-service (e.g., contract or integration tests) and under this feature’s control; avoid vanity metrics or external business outcomes that cannot be validated during development.
 
 ## Architecture Standards
 
@@ -42,6 +44,7 @@
 - Tests (`go test ./...`) MUST pass before merging. Contract tests run under `test/contract`; integration tests use `httptest` with mocked Hydra/Kratos clients.
 - Any change to OpenAPI contracts requires regenerating associated fixtures and reviewing downstream consumers.
 - Release bumps require update to `docs/operations.md` and changelog entry summarizing risk.
+- Feature numbering is global. Every new feature branch, Spec Kit directory, and checklist MUST use the next available integer across the repository (e.g., `004-agent-claim`), never resetting numbering per initiative or contributor.
 
 ## Governance
 
@@ -49,4 +52,4 @@
 - Major changes (new external dependency, architecture shift) require constitution update and review.
 - Operability incidents result in follow-up tasks captured in Spec Kit memory.
 
-**Version**: 1.3.0 | **Ratified**: 2025-10-29 | **Last Amended**: 2025-11-17
+**Version**: 1.3.2 | **Ratified**: 2025-10-29 | **Last Amended**: 2025-11-20

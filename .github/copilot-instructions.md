@@ -15,6 +15,8 @@
 - N/A (feature reads from existing Kratos and Alkemio server; no new storage) (003-token-claims-oidc)
 - Go 1.25 (per constitution/toolchain) + Chi router, Zap logging, internal Hydra/Kratos clients, identity resolver REST dependency (004-agent-claim)
 - N/A (stateless token orchestration only) (004-agent-claim)
+- Go 1.25 (per Spec Kit toolchain) + Internal CLI `cmd/docstringcov` built on Go stdlib `go/ast` + `go/packages`, invoked via `make docstring-coverage` and GitHub Actions job; `golangci-lint` remains for complementary lint rules (005-docstring-coverage)
+- Git-tracked JSON artifacts in `docs/coverage/coverage-latest.json` plus rotating history under `docs/coverage/history/` (retain last 20 runs) (005-docstring-coverage)
 
 ## Recent Changes
 - 002-token-claims: Added Go 1.25 (from copilot instructions and constitution) + Chi router, Zap logging, Hydra client, Kratos client

@@ -19,6 +19,7 @@ type HydraClientStub struct {
 	AcceptConsentFunc func(ctx context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error)
 }
 
+// GetLoginRequest executes the configured stub for Hydra login lookups.
 func (s *HydraClientStub) GetLoginRequest(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2LoginRequest, *http.Response, error) {
 	if s == nil || s.GetLoginFunc == nil {
 		return nil, nil, errors.New("get login request not stubbed")
@@ -26,6 +27,7 @@ func (s *HydraClientStub) GetLoginRequest(ctx context.Context, challengeID strin
 	return s.GetLoginFunc(ctx, challengeID)
 }
 
+// AcceptLoginRequest executes the configured stub for Hydra login acceptance.
 func (s *HydraClientStub) AcceptLoginRequest(ctx context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2LoginRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
 	if s == nil || s.AcceptLoginFunc == nil {
 		return nil, nil, errors.New("accept login request not stubbed")
@@ -33,6 +35,7 @@ func (s *HydraClientStub) AcceptLoginRequest(ctx context.Context, challengeID st
 	return s.AcceptLoginFunc(ctx, challengeID, body)
 }
 
+// GetConsentRequest executes the configured stub for Hydra consent lookups.
 func (s *HydraClientStub) GetConsentRequest(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
 	if s == nil || s.GetConsentFunc == nil {
 		return nil, nil, errors.New("get consent request not stubbed")
@@ -40,6 +43,7 @@ func (s *HydraClientStub) GetConsentRequest(ctx context.Context, challengeID str
 	return s.GetConsentFunc(ctx, challengeID)
 }
 
+// AcceptConsentRequest executes the configured stub for Hydra consent acceptance.
 func (s *HydraClientStub) AcceptConsentRequest(ctx context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
 	if s == nil || s.AcceptConsentFunc == nil {
 		return nil, nil, errors.New("accept consent request not stubbed")
@@ -52,6 +56,7 @@ type IdentityFetcherStub struct {
 	FetchFunc func(ctx context.Context, identityID string) (*challenge.IdentityProfile, error)
 }
 
+// Fetch executes the configured identity lookup stub.
 func (s IdentityFetcherStub) Fetch(ctx context.Context, identityID string) (*challenge.IdentityProfile, error) {
 	if s.FetchFunc == nil {
 		return nil, errors.New("identity fetch not stubbed")
@@ -64,6 +69,7 @@ type AlkemioResolverStub struct {
 	ResolveFunc func(ctx context.Context, authenticationID string) (*alkemio.IdentityMapping, error)
 }
 
+// Resolve executes the configured Alkemio resolver stub.
 func (s AlkemioResolverStub) Resolve(ctx context.Context, authenticationID string) (*alkemio.IdentityMapping, error) {
 	if s.ResolveFunc == nil {
 		return nil, errors.New("alkemio resolve not stubbed")

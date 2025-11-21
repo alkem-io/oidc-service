@@ -1,0 +1,107 @@
+{
+  "generatedAt": "2025-11-21T17:12:00.429765Z",
+  "overallCoverage": 100,
+  "documentedExports": 174,
+  "totalExports": 174,
+  "threshold": 80,
+  "packages": [
+    {
+      "path": "cmd/docstringcov",
+      "coverage": 100,
+      "documented": 1,
+      "undocumented": 0,
+      "missingSymbols": []
+    },
+    {
+      "path": "cmd/server",
+      "coverage": 100,
+      "documented": 1,
+      "undocumented": 0,
+      "missingSymbols": []
+    },
+    {
+      "path": "internal/alkemio",
+      "coverage": 100,
+      "documented": 9,
+      "undocumented": 0,
+      "missingSymbols": []
+    },
+    {
+      "path": "internal/challenge",
+      "coverage": 100,
+      "documented": 84,
+      "undocumented": 0,
+      "missingSymbols": []
+    },
+    {
+      "path": "internal/config",
+      "coverage": 100,
+      "documented": 7,
+      "undocumented": 0,
+      "missingSymbols": []
+    },
+    {
+      "path": "internal/docstringcov/analyzer",
+      "coverage": 100,
+      "documented": 6,
+      "undocumented": 0,
+      "missingSymbols": []
+    },
+    {
+      "path": "internal/docstringcov/formatter",
+      "coverage": 100,
+      "documented": 2,
+      "undocumented": 0,
+      "missingSymbols": []
+    },
+    {
+      "path": "internal/hydra",
+      "coverage": 100,
+      "documented": 5,
+      "undocumented": 0,
+      "missingSymbols": []
+    },
+    {
+      "path": "internal/kratos",
+      "coverage": 100,
+      "documented": 9,
+      "undocumented": 0,
+      "missingSymbols": []
+    },
+    {
+      "path": "internal/maintenance",
+      "coverage": 100,
+      "documented": 5,
+      "undocumented": 0,
+      "missingSymbols": []
+    },
+    {
+      "path": "internal/middleware",
+      "coverage": 100,
+      "documented": 10,
+      "undocumented": 0,
+      "missingSymbols": []
+    },
+    {
+      "path": "internal/server",
+      "coverage": 100,
+      "documented": 11,
+      "undocumented": 0,
+      "missingSymbols": []
+    },
+    {
+      "path": "pkg/telemetry",
+      "coverage": 100,
+      "documented": 2,
+      "undocumented": 0,
+      "missingSymbols": []
+    },
+    {
+      "path": "test/support",
+      "coverage": 100,
+      "documented": 22,
+      "undocumented": 0,
+      "missingSymbols": []
+    }
+  ]
+}

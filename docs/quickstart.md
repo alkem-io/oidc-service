@@ -181,6 +181,31 @@ ships with the following workflows under `.github/workflows/`:
 Consult the repository secrets to ensure Docker registry and Travis API tokens
 are available before invoking the release or deployment workflows.
 
+## 10. Docstring Coverage Tool
+
+Run the internal coverage CLI before submitting docstring changes to confirm
+the repository stays above the enforced threshold:
+
+```sh
+make docstring-coverage
+```
+
+The target builds and executes `cmd/docstringcov`, prints a summary such as
+`Overall coverage: 82.50% (165/200 exports documented)`, and writes the full
+per-package breakdown (including missing symbols) to `docs/coverage.json`.
+The command exits non-zero if overall or per-package coverage dips below the
+threshold defined by `OIDC_DOCSTRING_COVERAGE_THRESHOLD` (defaults to 80%).
+
+Pass additional flags when needed—for example to tighten the threshold or
+inspect a different root—by supplying `DOCSTRINGCOV_FLAGS`:
+
+```sh
+make docstring-coverage DOCSTRINGCOV_FLAGS="--threshold 90 --root ./internal"
+```
+
+Commit the resulting `docs/coverage.json` when coverage changes so reviewers
+can track the trend alongside incremental doc updates.
+
 ## Troubleshooting
 
 - Readiness showing `unreachable` indicates Hydra or Kratos is misconfigured—

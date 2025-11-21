@@ -1,3 +1,4 @@
+// Package main wires the HTTP server and supporting clients for the OIDC service.
 package main
 
 import (

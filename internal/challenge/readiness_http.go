@@ -51,6 +51,7 @@ func NewHTTPReadinessProbe(baseURL, readyPath, versionPath, token string, timeou
 	}, nil
 }
 
+// Ready verifies that the upstream service reports a successful readiness response.
 func (p *httpReadinessProbe) Ready(ctx context.Context) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.readyURL, nil)
 	if err != nil {
@@ -76,6 +77,7 @@ func (p *httpReadinessProbe) Ready(ctx context.Context) error {
 	return fmt.Errorf("readiness endpoint returned status %d", resp.StatusCode)
 }
 
+// Version retrieves the reported version string from the upstream service.
 func (p *httpReadinessProbe) Version(ctx context.Context) (string, error) {
 	if p.versionURL == "" {
 		return "", nil

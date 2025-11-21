@@ -41,3 +41,19 @@ Optional:
 - `OIDC_LOGIN_RETURN_BASE_URL` to override the default `${OIDC_WEB_BASE_URL}/oidc/login`.
 
 See `configs/env.sample` for a documented template.
+
+## Docstring Coverage
+
+Run the internal coverage CLI before pushing docstring changes to keep the
+repository above the enforced threshold:
+
+```sh
+make docstring-coverage
+```
+
+The target builds `cmd/docstringcov`, prints overall/per-package coverage, and
+writes the structured report to `docs/coverage.json`. The command exits with a
+non-zero status if overall coverage or any package drops below the configured
+`OIDC_DOCSTRING_COVERAGE_THRESHOLD` (defaults to 80%). Supply extra flags via
+`DOCSTRINGCOV_FLAGS` when you need to override the threshold or scan a different
+root, e.g. `make docstring-coverage DOCSTRINGCOV_FLAGS="--threshold 90"`.

@@ -19,18 +19,22 @@ type LoggerStub struct {
 	entries []LogEntry
 }
 
+// Info records an info-level log entry for assertions.
 func (l *LoggerStub) Info(msg string, fields ...interface{}) {
 	l.append("info", msg, fields...)
 }
 
+// Warn records a warn-level log entry for assertions.
 func (l *LoggerStub) Warn(msg string, fields ...interface{}) {
 	l.append("warn", msg, fields...)
 }
 
+// Error records an error-level log entry for assertions.
 func (l *LoggerStub) Error(msg string, fields ...interface{}) {
 	l.append("error", msg, fields...)
 }
 
+// Debug records a debug-level log entry for assertions.
 func (l *LoggerStub) Debug(msg string, fields ...interface{}) {
 	l.append("debug", msg, fields...)
 }

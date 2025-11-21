@@ -10,7 +10,10 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/google/uuid"
 	kratosclient "github.com/ory/client-go"
+
+	"github.com/alkem-io/oidc-service/internal/alkemio"
 )
 
 // IdentityProviderFunc fetches a Kratos identity and exposes the raw HTTP response for error inspection.
@@ -20,6 +23,8 @@ type IdentityProviderFunc func(ctx context.Context, identityID string) (*kratosc
 type IdentityMapper struct {
 	fetch IdentityProviderFunc
 }
+
+var errInvalidAlkemioMapping = errors.New("invalid alkemio identity mapping")
 
 // NewIdentityMapper constructs an IdentityMapper backed by the given Kratos API implementation.
 func NewIdentityMapper(api kratosclient.IdentityAPI) *IdentityMapper {
@@ -221,6 +226,39 @@ func dedupe(values []string) []string {
 		result = append(result, value)
 	}
 	return result
+}
+
+// validateAlkemioMapping ensures resolver payloads include canonical UUIDs for user and agent ids.
+func validateAlkemioMapping(mapping *alkemio.IdentityMapping) (*alkemio.IdentityMapping, error) {
+	if mapping == nil {
+		return nil, invalidMappingError("mapping missing")
+	}
+
+	userID := strings.TrimSpace(mapping.UserID)
+	if userID == "" {
+		return nil, invalidMappingError("missing user id")
+	}
+	if _, err := uuid.Parse(userID); err != nil {
+		return nil, invalidMappingError("invalid user id")
+	}
+
+	agentID := strings.TrimSpace(mapping.AgentID)
+	if agentID == "" {
+		return nil, invalidMappingError("missing agent id")
+	}
+	if _, err := uuid.Parse(agentID); err != nil {
+		return nil, invalidMappingError("invalid agent id")
+	}
+
+	return &alkemio.IdentityMapping{UserID: userID, AgentID: agentID}, nil
+}
+
+func invalidMappingError(reason string) error {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return errInvalidAlkemioMapping
+	}
+	return fmt.Errorf("%w: %s", errInvalidAlkemioMapping, reason)
 }
 
 // extractTokenClaims builds TokenClaims from Kratos identity data.

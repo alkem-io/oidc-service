@@ -19,10 +19,37 @@ import (
 	testsupport "github.com/alkem-io/oidc-service/test/support"
 )
 
+const (
+	testUserEmail        = "user@example.com"
+	testUserDisplayName  = "Example User"
+	errFmtNewService     = "new service: %v"
+	errFmtExpectedStatus = "expected status %d, got %d"
+	errFmtDecodeResponse = "decode response: %v"
+	consentPathFormat    = "/v1/oidc/consent?consent_challenge=%s"
+	challengeConsentID   = "integration-consent"
+	challengeMissingID   = "integration-missing"
+	challengeErrorID     = "integration-error"
+	challengeTimeoutID   = "integration-timeout"
+	challengeMaintID     = "integration-maintenance"
+	challengeInvalidID   = "integration-invalid-agent"
+)
+
+var (
+	testResolverFixture = struct {
+		AuthenticationID string
+		UserID           string
+		AgentID          string
+	}{
+		AuthenticationID: "8c0b7f5a-4dce-4d13-b6ad-6b2df2c1d10c",
+		UserID:           "1bcf5bd1-5f3e-4f01-9125-0edc93e5f5b1",
+		AgentID:          "6f4ed2d2-0ad0-4b83-8d43-8d9b9b4970b3",
+	}
+)
+
 func TestConsentEndpointAddsAlkemioUserIDClaim(t *testing.T) {
-	consent := hydraAdmin.NewOAuth2ConsentRequest("integration-consent")
-	consent.SetSubject("kratos-identity")
-	consent.SetContext(map[string]any{"identity_id": "kratos-identity"})
+	consent := hydraAdmin.NewOAuth2ConsentRequest(challengeConsentID)
+	consent.SetSubject(testResolverFixture.AuthenticationID)
+	consent.SetContext(map[string]any{"identity_id": testResolverFixture.AuthenticationID})
 
 	var (
 		capturedAccess map[string]any
@@ -31,7 +58,7 @@ func TestConsentEndpointAddsAlkemioUserIDClaim(t *testing.T) {
 
 	hydraStub := &testsupport.HydraClientStub{
 		GetConsentFunc: func(_ context.Context, challengeID string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
-			if challengeID != "integration-consent" {
+			if challengeID != challengeConsentID {
 				t.Fatalf("unexpected challenge id: %s", challengeID)
 			}
 			return consent, &http.Response{StatusCode: http.StatusOK}, nil
@@ -59,14 +86,14 @@ func TestConsentEndpointAddsAlkemioUserIDClaim(t *testing.T) {
 	}
 
 	resolverStub := testsupport.AlkemioResolverStub{
-		ResolveFunc: func(_ context.Context, authenticationID string) (string, error) {
-			return "alkemio-user-123", nil
+		ResolveFunc: func(_ context.Context, authenticationID string) (*alkemio.IdentityMapping, error) {
+			return testsupport.NewAlkemioMapping(testResolverFixture.UserID, testResolverFixture.AgentID), nil
 		},
 	}
 
 	svc, err := challenge.NewService(challenge.Options{Hydra: hydraStub, Identity: identityStub, Alkemio: resolverStub})
 	if err != nil {
-		t.Fatalf("new service: %v", err)
+		t.Fatalf(errFmtNewService, err)
 	}
 
 	router := server.NewRouter(server.Options{
@@ -75,29 +102,35 @@ func TestConsentEndpointAddsAlkemioUserIDClaim(t *testing.T) {
 		Challenge:   svc,
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/oidc/consent?consent_challenge=integration-consent", nil)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf(consentPathFormat, challengeConsentID), nil)
 	rec := httptest.NewRecorder()
 
 	router.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusFound {
-		t.Fatalf("expected redirect, got %d", rec.Code)
+		t.Fatalf(errFmtExpectedStatus, http.StatusFound, rec.Code)
 	}
 	if loc := rec.Header().Get("Location"); loc == "" {
 		t.Fatal("expected redirect location")
 	}
 
-	if capturedAccess["alkemio_user_id"] != "alkemio-user-123" {
+	if capturedAccess["alkemio_user_id"] != testResolverFixture.UserID {
 		t.Fatalf("access token missing alkemio_user_id: %v", capturedAccess)
 	}
-	if capturedID["alkemio_user_id"] != "alkemio-user-123" {
+	if capturedAccess["agent_id"] != testResolverFixture.AgentID {
+		t.Fatalf("access token missing agent_id: %v", capturedAccess)
+	}
+	if capturedID["alkemio_user_id"] != testResolverFixture.UserID {
 		t.Fatalf("id token missing alkemio_user_id: %v", capturedID)
+	}
+	if capturedID["agent_id"] != testResolverFixture.AgentID {
+		t.Fatalf("id token missing agent_id: %v", capturedID)
 	}
 }
 
 func TestConsentEndpointFailsWhenIdentityMissing(t *testing.T) {
-	consent := hydraAdmin.NewOAuth2ConsentRequest("integration-missing")
-	consent.SetSubject("kratos-identity")
+	consent := hydraAdmin.NewOAuth2ConsentRequest(challengeMissingID)
+	consent.SetSubject(testResolverFixture.AuthenticationID)
 
 	hydraStub := &testsupport.HydraClientStub{
 		GetConsentFunc: func(_ context.Context, challengeID string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
@@ -113,21 +146,21 @@ func TestConsentEndpointFailsWhenIdentityMissing(t *testing.T) {
 		FetchFunc: func(_ context.Context, identityID string) (*challenge.IdentityProfile, error) {
 			return &challenge.IdentityProfile{
 				ID:          identityID,
-				Email:       "user@example.com",
-				DisplayName: "Example User",
+				Email:       testUserEmail,
+				DisplayName: testUserDisplayName,
 			}, nil
 		},
 	}
 
 	resolverStub := testsupport.AlkemioResolverStub{
-		ResolveFunc: func(_ context.Context, authenticationID string) (string, error) {
-			return "", alkemio.ErrNotFound
+		ResolveFunc: func(_ context.Context, authenticationID string) (*alkemio.IdentityMapping, error) {
+			return nil, alkemio.ErrNotFound
 		},
 	}
 
 	svc, err := challenge.NewService(challenge.Options{Hydra: hydraStub, Identity: identityStub, Alkemio: resolverStub})
 	if err != nil {
-		t.Fatalf("new service: %v", err)
+		t.Fatalf(errFmtNewService, err)
 	}
 
 	router := server.NewRouter(server.Options{
@@ -136,18 +169,18 @@ func TestConsentEndpointFailsWhenIdentityMissing(t *testing.T) {
 		Challenge:   svc,
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/oidc/consent?consent_challenge=integration-missing", nil)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf(consentPathFormat, challengeMissingID), nil)
 	rec := httptest.NewRecorder()
 
 	router.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusForbidden {
-		t.Fatalf("expected status %d, got %d", http.StatusForbidden, rec.Code)
+		t.Fatalf(errFmtExpectedStatus, http.StatusForbidden, rec.Code)
 	}
 
 	var payload map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("decode response: %v", err)
+		t.Fatalf(errFmtDecodeResponse, err)
 	}
 	if payload["error"] != "alkemio_identity_missing" {
 		t.Fatalf("unexpected error payload: %v", payload)
@@ -155,9 +188,9 @@ func TestConsentEndpointFailsWhenIdentityMissing(t *testing.T) {
 }
 
 func TestConsentEndpointFailsOnResolverError(t *testing.T) {
-	consent := hydraAdmin.NewOAuth2ConsentRequest("integration-error")
-	consent.SetSubject("kratos-identity")
-	consent.SetContext(map[string]any{"identity_id": "kratos-identity"})
+	consent := hydraAdmin.NewOAuth2ConsentRequest(challengeErrorID)
+	consent.SetSubject(testResolverFixture.AuthenticationID)
+	consent.SetContext(map[string]any{"identity_id": testResolverFixture.AuthenticationID})
 
 	hydraStub := &testsupport.HydraClientStub{
 		GetConsentFunc: func(_ context.Context, challengeID string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
@@ -171,21 +204,21 @@ func TestConsentEndpointFailsOnResolverError(t *testing.T) {
 
 	identityStub := testsupport.IdentityFetcherStub{
 		FetchFunc: func(_ context.Context, identityID string) (*challenge.IdentityProfile, error) {
-			return &challenge.IdentityProfile{ID: identityID, Email: "user@example.com"}, nil
+			return &challenge.IdentityProfile{ID: identityID, Email: testUserEmail}, nil
 		},
 	}
 
 	var resolverCalls int
 	resolverStub := testsupport.AlkemioResolverStub{
-		ResolveFunc: func(_ context.Context, authenticationID string) (string, error) {
+		ResolveFunc: func(_ context.Context, authenticationID string) (*alkemio.IdentityMapping, error) {
 			resolverCalls++
-			return "", fmt.Errorf("alkemio server returned 503 for %s", authenticationID)
+			return nil, fmt.Errorf("alkemio server returned 503 for %s", authenticationID)
 		},
 	}
 
 	svc, err := challenge.NewService(challenge.Options{Hydra: hydraStub, Identity: identityStub, Alkemio: resolverStub})
 	if err != nil {
-		t.Fatalf("new service: %v", err)
+		t.Fatalf(errFmtNewService, err)
 	}
 
 	router := server.NewRouter(server.Options{
@@ -194,17 +227,17 @@ func TestConsentEndpointFailsOnResolverError(t *testing.T) {
 		Challenge:   svc,
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/oidc/consent?consent_challenge=integration-error", nil)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf(consentPathFormat, challengeErrorID), nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusBadGateway {
-		t.Fatalf("expected status %d, got %d", http.StatusBadGateway, rec.Code)
+		t.Fatalf(errFmtExpectedStatus, http.StatusBadGateway, rec.Code)
 	}
 
 	var payload map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("decode response: %v", err)
+		t.Fatalf(errFmtDecodeResponse, err)
 	}
 	if payload["error"] != "alkemio_resolution_failed" {
 		t.Fatalf("unexpected error response: %v", payload)
@@ -214,10 +247,65 @@ func TestConsentEndpointFailsOnResolverError(t *testing.T) {
 	}
 }
 
+func TestConsentEndpointFailsWhenAgentIDInvalid(t *testing.T) {
+	consent := hydraAdmin.NewOAuth2ConsentRequest(challengeInvalidID)
+	consent.SetSubject(testResolverFixture.AuthenticationID)
+	consent.SetContext(map[string]any{"identity_id": testResolverFixture.AuthenticationID})
+
+	hydraStub := &testsupport.HydraClientStub{
+		GetConsentFunc: func(_ context.Context, challengeID string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
+			return consent, &http.Response{StatusCode: http.StatusOK}, nil
+		},
+		AcceptConsentFunc: func(context.Context, string, *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
+			t.Fatal("accept consent should not be called when mapping invalid")
+			return nil, nil, nil
+		},
+	}
+
+	identityStub := testsupport.IdentityFetcherStub{
+		FetchFunc: func(_ context.Context, identityID string) (*challenge.IdentityProfile, error) {
+			return &challenge.IdentityProfile{ID: identityID, Email: testUserEmail}, nil
+		},
+	}
+
+	resolverStub := testsupport.AlkemioResolverStub{
+		ResolveFunc: func(_ context.Context, authenticationID string) (*alkemio.IdentityMapping, error) {
+			return testsupport.NewAlkemioMapping(testResolverFixture.UserID, "not-a-uuid"), nil
+		},
+	}
+
+	svc, err := challenge.NewService(challenge.Options{Hydra: hydraStub, Identity: identityStub, Alkemio: resolverStub})
+	if err != nil {
+		t.Fatalf(errFmtNewService, err)
+	}
+
+	router := server.NewRouter(server.Options{
+		Logger:      zap.NewNop(),
+		Maintenance: maintenance.NewState(config.MaintenanceState{}),
+		Challenge:   svc,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf(consentPathFormat, challengeInvalidID), nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf(errFmtExpectedStatus, http.StatusBadGateway, rec.Code)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf(errFmtDecodeResponse, err)
+	}
+	if payload["error"] != "alkemio_resolution_failed" {
+		t.Fatalf("unexpected error response: %v", payload)
+	}
+}
+
 func TestConsentEndpointLogsResolverTimeout(t *testing.T) {
-	consent := hydraAdmin.NewOAuth2ConsentRequest("integration-timeout")
-	consent.SetSubject("kratos-identity-123456")
-	consent.SetContext(map[string]any{"identity_id": "kratos-identity-123456"})
+	consent := hydraAdmin.NewOAuth2ConsentRequest(challengeTimeoutID)
+	consent.SetSubject(testResolverFixture.AuthenticationID)
+	consent.SetContext(map[string]any{"identity_id": testResolverFixture.AuthenticationID})
 
 	hydraStub := &testsupport.HydraClientStub{
 		GetConsentFunc: func(_ context.Context, challengeID string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
@@ -231,20 +319,20 @@ func TestConsentEndpointLogsResolverTimeout(t *testing.T) {
 
 	identityStub := testsupport.IdentityFetcherStub{
 		FetchFunc: func(_ context.Context, identityID string) (*challenge.IdentityProfile, error) {
-			return &challenge.IdentityProfile{ID: identityID, Email: "user@example.com"}, nil
+			return &challenge.IdentityProfile{ID: identityID, Email: testUserEmail}, nil
 		},
 	}
 
 	logger := &testsupport.LoggerStub{}
 	resolverStub := testsupport.AlkemioResolverStub{
-		ResolveFunc: func(_ context.Context, authenticationID string) (string, error) {
-			return "", context.DeadlineExceeded
+		ResolveFunc: func(_ context.Context, authenticationID string) (*alkemio.IdentityMapping, error) {
+			return nil, context.DeadlineExceeded
 		},
 	}
 
 	svc, err := challenge.NewService(challenge.Options{Hydra: hydraStub, Identity: identityStub, Alkemio: resolverStub, Logger: logger})
 	if err != nil {
-		t.Fatalf("new service: %v", err)
+		t.Fatalf(errFmtNewService, err)
 	}
 
 	router := server.NewRouter(server.Options{
@@ -253,12 +341,12 @@ func TestConsentEndpointLogsResolverTimeout(t *testing.T) {
 		Challenge:   svc,
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/oidc/consent?consent_challenge=integration-timeout", nil)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf(consentPathFormat, challengeTimeoutID), nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusBadGateway {
-		t.Fatalf("expected status %d, got %d", http.StatusBadGateway, rec.Code)
+		t.Fatalf(errFmtExpectedStatus, http.StatusBadGateway, rec.Code)
 	}
 
 	warnEntries := logger.EntriesByLevel("warn")
@@ -269,7 +357,7 @@ func TestConsentEndpointLogsResolverTimeout(t *testing.T) {
 	if entry.Fields["error_type"] != "timeout" {
 		t.Fatalf("expected timeout error_type, got %v", entry.Fields["error_type"])
 	}
-	if entry.Fields["identity_id"] == "kratos-identity-123456" {
+	if entry.Fields["identity_id"] == testResolverFixture.AuthenticationID {
 		t.Fatalf("expected masked identity id, got %v", entry.Fields["identity_id"])
 	}
 }
@@ -292,15 +380,15 @@ func TestMaintenanceShortCircuitsBeforeResolver(t *testing.T) {
 	}
 
 	resolverStub := testsupport.AlkemioResolverStub{
-		ResolveFunc: func(context.Context, string) (string, error) {
+		ResolveFunc: func(context.Context, string) (*alkemio.IdentityMapping, error) {
 			t.Fatal("resolver should not be called during maintenance")
-			return "", nil
+			return nil, nil
 		},
 	}
 
 	svc, err := challenge.NewService(challenge.Options{Hydra: hydraStub, Identity: identityStub, Alkemio: resolverStub})
 	if err != nil {
-		t.Fatalf("new service: %v", err)
+		t.Fatalf(errFmtNewService, err)
 	}
 
 	router := server.NewRouter(server.Options{
@@ -309,17 +397,17 @@ func TestMaintenanceShortCircuitsBeforeResolver(t *testing.T) {
 		Challenge:   svc,
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/oidc/consent?consent_challenge=integration-maintenance", nil)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf(consentPathFormat, challengeMaintID), nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected status %d, got %d", http.StatusServiceUnavailable, rec.Code)
+		t.Fatalf(errFmtExpectedStatus, http.StatusServiceUnavailable, rec.Code)
 	}
 
 	var payload map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("decode response: %v", err)
+		t.Fatalf(errFmtDecodeResponse, err)
 	}
 	if payload["error"] != "maintenance_mode" {
 		t.Fatalf("unexpected error payload: %v", payload)

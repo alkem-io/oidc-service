@@ -7,6 +7,7 @@ import (
 
 	hydraAdmin "github.com/ory/hydra-client-go/v2"
 
+	"github.com/alkem-io/oidc-service/internal/alkemio"
 	"github.com/alkem-io/oidc-service/internal/challenge"
 )
 
@@ -60,12 +61,12 @@ func (s IdentityFetcherStub) Fetch(ctx context.Context, identityID string) (*cha
 
 // AlkemioResolverStub provides a configurable Alkemio resolver implementation for tests.
 type AlkemioResolverStub struct {
-	ResolveFunc func(ctx context.Context, authenticationID string) (string, error)
+	ResolveFunc func(ctx context.Context, authenticationID string) (*alkemio.IdentityMapping, error)
 }
 
-func (s AlkemioResolverStub) Resolve(ctx context.Context, authenticationID string) (string, error) {
+func (s AlkemioResolverStub) Resolve(ctx context.Context, authenticationID string) (*alkemio.IdentityMapping, error) {
 	if s.ResolveFunc == nil {
-		return "", errors.New("alkemio resolve not stubbed")
+		return nil, errors.New("alkemio resolve not stubbed")
 	}
 	return s.ResolveFunc(ctx, authenticationID)
 }

@@ -1,6 +1,10 @@
 package challenge
 
-import kratosclient "github.com/ory/client-go"
+import (
+	kratosclient "github.com/ory/client-go"
+
+	"github.com/alkem-io/oidc-service/internal/alkemio"
+)
 
 // TestExtractEmailVerifiedClaim exposes extractEmailVerifiedClaim for unit testing.
 func TestExtractEmailVerifiedClaim(identity *kratosclient.Identity) *bool {
@@ -25,4 +29,14 @@ func TestExtractFamilyNameClaim(traits map[string]interface{}) string {
 // TestExtractTokenClaims exposes extractTokenClaims for unit testing.
 func TestExtractTokenClaims(identity *kratosclient.Identity) *TokenClaims {
 	return extractTokenClaims(identity)
+}
+
+// TestAlkemioMapping constructs an identity mapping for resolver-focused tests.
+func TestAlkemioMapping(userID, agentID string) *alkemio.IdentityMapping {
+	return &alkemio.IdentityMapping{UserID: userID, AgentID: agentID}
+}
+
+// TestValidateAlkemioMapping exposes validateAlkemioMapping for unit tests.
+func TestValidateAlkemioMapping(mapping *alkemio.IdentityMapping) (*alkemio.IdentityMapping, error) {
+	return validateAlkemioMapping(mapping)
 }

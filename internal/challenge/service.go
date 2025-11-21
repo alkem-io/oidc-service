@@ -37,9 +37,9 @@ type IdentityFetcher interface {
 	Fetch(ctx context.Context, identityID string) (*IdentityProfile, error)
 }
 
-// AlkemioResolver resolves internal Alkemio user identifiers from Kratos identities.
+// AlkemioResolver resolves internal Alkemio user/agent identifiers from Kratos identities.
 type AlkemioResolver interface {
-	Resolve(ctx context.Context, authenticationID string) (string, error)
+	Resolve(ctx context.Context, authenticationID string) (*alkemio.IdentityMapping, error)
 }
 
 // Options configures the challenge service orchestrator.
@@ -475,16 +475,29 @@ func (s *service) attachAlkemioClaim(ctx context.Context, challengeID string, pr
 
 	maskedIdentity := maskIdentityID(profile.ID)
 	if s.logger != nil {
-		s.logger.Debug("resolving alkemio user id",
+		s.logger.Debug("resolving alkemio identity mapping",
 			"challenge_id", challengeID,
 			"identity_id", maskedIdentity,
 		)
 	}
 
-	userID, err := s.alkemio.Resolve(ctx, profile.ID)
+	mapping, err := s.alkemio.Resolve(ctx, profile.ID)
 	if err != nil {
 		if s.logger != nil {
-			s.logger.Warn("failed to resolve alkemio user id",
+			s.logger.Warn("failed to resolve alkemio identity mapping",
+				"challenge_id", challengeID,
+				"identity_id", maskedIdentity,
+				"error_type", classifyAlkemioErrorType(err),
+				"error", err,
+			)
+		}
+		return mapAlkemioError(challengeID, err)
+	}
+
+	validated, err := validateAlkemioMapping(mapping)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.Warn("received invalid alkemio identity mapping",
 				"challenge_id", challengeID,
 				"identity_id", maskedIdentity,
 				"error_type", classifyAlkemioErrorType(err),
@@ -495,14 +508,17 @@ func (s *service) attachAlkemioClaim(ctx context.Context, challengeID string, pr
 	}
 
 	if s.logger != nil {
-		s.logger.Debug("resolved alkemio user id",
+		s.logger.Debug("resolved alkemio identity mapping",
 			"challenge_id", challengeID,
 			"identity_id", maskedIdentity,
+			"alkemio_user_id", maskIdentityID(validated.UserID),
+			"agent_id", maskIdentityID(validated.AgentID),
 		)
 	}
 
 	profile.TokenClaims = ensureTokenClaims(profile.TokenClaims)
-	profile.TokenClaims.AlkemioUserID = stringPointer(userID)
+	profile.TokenClaims.AlkemioUserID = stringPointer(validated.UserID)
+	profile.TokenClaims.AlkemioAgentID = stringPointer(validated.AgentID)
 	return nil
 }
 
@@ -541,6 +557,9 @@ func (s *service) buildIDTokenClaims(profile *IdentityProfile) map[string]any {
 	if profile.MatrixUserID != "" {
 		claims["matrix_user_id"] = profile.MatrixUserID
 	}
+	if profile.TokenClaims != nil && profile.TokenClaims.AlkemioAgentID != nil {
+		claims["agent_id"] = *profile.TokenClaims.AlkemioAgentID
+	}
 
 	var extraClaims map[string]any
 	if profile.TokenClaims != nil && !profile.TokenClaims.IsEmpty() {
@@ -559,6 +578,9 @@ func (s *service) buildAccessTokenClaims(profile *IdentityProfile) map[string]an
 	}
 	if profile.MatrixUserID != "" {
 		claims["matrix_user_id"] = profile.MatrixUserID
+	}
+	if profile.TokenClaims != nil && profile.TokenClaims.AlkemioAgentID != nil {
+		claims["agent_id"] = *profile.TokenClaims.AlkemioAgentID
 	}
 	if len(profile.Traits) > 0 {
 		claims["traits"] = cloneTraits(profile.Traits)
@@ -731,6 +753,8 @@ func classifyAlkemioErrorType(err error) string {
 		return "none"
 	case errors.Is(err, alkemio.ErrNotFound):
 		return "not_found"
+	case errors.Is(err, errInvalidAlkemioMapping):
+		return "invalid_mapping"
 	case isTimeoutError(err):
 		return "timeout"
 	default:

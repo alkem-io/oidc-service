@@ -9,9 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/alkem-io/oidc-service/internal/challenge"
 	middlewarepkg "github.com/alkem-io/oidc-service/internal/middleware"
-	"go.uber.org/zap"
 )
 
 // SessionIdentityResolver resolves a Kratos session cookie into an identity identifier.

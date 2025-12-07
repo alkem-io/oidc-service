@@ -6,8 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/alkem-io/oidc-service/internal/challenge"
 	"go.uber.org/zap"
+
+	"github.com/alkem-io/oidc-service/internal/challenge"
 )
 
 // WriteChallengeError serializes challenge-aware errors into the HTTP response.

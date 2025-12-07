@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alkem-io/oidc-service/internal/challenge"
 	"github.com/stretchr/testify/require"
+
+	"github.com/alkem-io/oidc-service/internal/challenge"
 )
 
 func TestSessionResolverIdentityIDSuccess(t *testing.T) {

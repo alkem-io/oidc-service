@@ -7,9 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alkem-io/oidc-service/internal/alkemio"
 	hydraAdmin "github.com/ory/hydra-client-go/v2"
 	"github.com/stretchr/testify/require"
+
+	"github.com/alkem-io/oidc-service/internal/alkemio"
 )
 
 const (

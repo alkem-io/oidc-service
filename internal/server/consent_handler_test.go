@@ -7,9 +7,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/alkem-io/oidc-service/internal/challenge"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/alkem-io/oidc-service/internal/challenge"
 )
 
 func TestConsentHandlerRedirectsOnSuccess(t *testing.T) {

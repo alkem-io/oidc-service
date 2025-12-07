@@ -5,9 +5,10 @@ import (
 	"strings"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/alkem-io/oidc-service/internal/challenge"
 	middlewarepkg "github.com/alkem-io/oidc-service/internal/middleware"
-	"go.uber.org/zap"
 )
 
 // ConsentHandler processes consent challenges and delegates to the challenge service.

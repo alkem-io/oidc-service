@@ -7,9 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/alkem-io/oidc-service/internal/config"
 	"github.com/alkem-io/oidc-service/internal/maintenance"
-	"github.com/stretchr/testify/require"
 )
 
 func TestMaintenanceMiddlewareAllowsRequestsWhenDisabled(t *testing.T) {

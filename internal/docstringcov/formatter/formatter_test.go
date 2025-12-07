@@ -6,8 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/alkem-io/oidc-service/internal/docstringcov/analyzer"
 	"github.com/stretchr/testify/require"
+
+	"github.com/alkem-io/oidc-service/internal/docstringcov/analyzer"
 )
 
 func TestWriteJSONIncludesAllPackages(t *testing.T) {

@@ -3,8 +3,9 @@ package unit_test
 import (
 	"testing"
 
-	"github.com/alkem-io/oidc-service/internal/challenge"
 	kratosclient "github.com/ory/client-go"
+
+	"github.com/alkem-io/oidc-service/internal/challenge"
 )
 
 // TestExtractEmailVerifiedClaimUnit tests the extractEmailVerifiedClaim function directly.

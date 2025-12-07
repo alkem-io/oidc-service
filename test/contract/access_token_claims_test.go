@@ -8,14 +8,15 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	hydraAdmin "github.com/ory/hydra-client-go/v2"
+	"go.uber.org/zap"
+
 	"github.com/alkem-io/oidc-service/internal/alkemio"
 	"github.com/alkem-io/oidc-service/internal/challenge"
 	"github.com/alkem-io/oidc-service/internal/config"
 	"github.com/alkem-io/oidc-service/internal/maintenance"
 	"github.com/alkem-io/oidc-service/internal/server"
 	testsupport "github.com/alkem-io/oidc-service/test/support"
-	hydraAdmin "github.com/ory/hydra-client-go/v2"
-	"go.uber.org/zap"
 )
 
 // TestAccessTokenClaimsContract validates that the consent handler routes

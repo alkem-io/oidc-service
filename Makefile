@@ -1,8 +1,16 @@
-GO ?= go
 BIN_DIR ?= bin
 SERVICE_BIN := $(BIN_DIR)/oidc-service
 DOCSTRINGCOV_BIN := $(BIN_DIR)/docstringcov
 DOCSTRINGCOV_FLAGS ?=
+
+# Go commands
+GO?=go
+GOTEST=$(GO) test
+GOBUILD=$(GO) build
+GOCLEAN=$(GO) clean
+GOVET=$(GO) vet
+GOFMT=$(GO) fmt
+
 
 .PHONY: build build-service build-docstringcov test lint docstring-coverage
 
@@ -23,9 +31,23 @@ build-docstringcov:
 test:
 	$(GO) test ./...
 
-# Run static analysis via golangci-lint.
+# Lint the code
+.PHONY: lint
 lint:
-	golangci-lint run
+	@echo "Linting..."
+	$(GOVET) ./...
+	# Check if golangci-lint is installed
+	@if command -v golangci-lint >/dev/null; then \
+		golangci-lint run; \
+	else \
+		echo "golangci-lint not found, skipping advanced linting"; \
+	fi
+
+# Format the code
+.PHONY: fmt
+fmt:
+	@echo "Formatting..."
+	$(GOFMT) ./...
 
 # Run the docstring coverage CLI and write docs/coverage.json.
 docstring-coverage: build-docstringcov

@@ -26,7 +26,7 @@ func (s *stubService) ResolveConsent(ctx context.Context, challengeID string) (*
 }
 
 // Readiness reports synthetic health data for the stub implementation.
-func (s *stubService) Readiness(ctx context.Context) ReadinessState {
+func (s *stubService) Readiness(_ context.Context) ReadinessState {
 	return ReadinessState{
 		Status:  "ready",
 		Hydra:   "ok",

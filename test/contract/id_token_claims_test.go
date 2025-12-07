@@ -8,14 +8,15 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	hydraAdmin "github.com/ory/hydra-client-go/v2"
+	"go.uber.org/zap"
+
 	"github.com/alkem-io/oidc-service/internal/alkemio"
 	"github.com/alkem-io/oidc-service/internal/challenge"
 	"github.com/alkem-io/oidc-service/internal/config"
 	"github.com/alkem-io/oidc-service/internal/maintenance"
 	"github.com/alkem-io/oidc-service/internal/server"
 	testsupport "github.com/alkem-io/oidc-service/test/support"
-	hydraAdmin "github.com/ory/hydra-client-go/v2"
-	"go.uber.org/zap"
 )
 
 func newIDTokenRouter() http.Handler {
@@ -79,29 +80,29 @@ func TestIDTokenClaimsIncludeAgentID(t *testing.T) {
 	var capturedID map[string]any
 
 	hydraStub := &testsupport.HydraClientStub{
-		GetConsentFunc: func(ctx context.Context, requested string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
+		GetConsentFunc: func(_ context.Context, requested string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
 			require.Equal(t, challengeID, requested)
-			return consent, &http.Response{StatusCode: http.StatusOK}, nil
+			return consent, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 		},
-		AcceptConsentFunc: func(ctx context.Context, requested string, body *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
+		AcceptConsentFunc: func(_ context.Context, requested string, body *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
 			require.Equal(t, challengeID, requested)
 			session := body.GetSession()
 			if claims, ok := session.GetIdToken().(map[string]any); ok {
 				capturedID = claims
 			}
-			return hydraAdmin.NewOAuth2RedirectTo("https://app.example/callback"), &http.Response{StatusCode: http.StatusOK}, nil
+			return hydraAdmin.NewOAuth2RedirectTo("https://app.example/callback"), &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 		},
 	}
 
 	identityStub := testsupport.IdentityFetcherStub{
-		FetchFunc: func(ctx context.Context, identityID string) (*challenge.IdentityProfile, error) {
+		FetchFunc: func(_ context.Context, identityID string) (*challenge.IdentityProfile, error) {
 			require.Equal(t, contractKratosID, identityID)
 			return &challenge.IdentityProfile{ID: identityID, Email: "user@example.com"}, nil
 		},
 	}
 
 	resolverStub := testsupport.AlkemioResolverStub{
-		ResolveFunc: func(ctx context.Context, authenticationID string) (*alkemio.IdentityMapping, error) {
+		ResolveFunc: func(_ context.Context, authenticationID string) (*alkemio.IdentityMapping, error) {
 			require.Equal(t, contractKratosID, authenticationID)
 			return testsupport.NewAlkemioMapping(contractUserID, contractAgentID), nil
 		},

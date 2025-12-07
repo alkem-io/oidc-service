@@ -3,8 +3,9 @@ package unit_test
 import (
 	"testing"
 
-	"github.com/alkem-io/oidc-service/internal/challenge"
 	kratosclient "github.com/ory/client-go"
+
+	"github.com/alkem-io/oidc-service/internal/challenge"
 )
 
 // TestExtractEmailVerifiedClaimUnit tests the extractEmailVerifiedClaim function directly.
@@ -123,11 +124,12 @@ func TestExtractEmailVerifiedClaimUnit(t *testing.T) {
 
 				result := challenge.TestExtractEmailVerifiedClaim(tc.identity)
 
-				if tc.expected == nil && result != nil {
+				switch {
+				case tc.expected == nil && result != nil:
 					t.Errorf("%s: expected nil, got %v", tc.description, *result)
-				} else if tc.expected != nil && result == nil {
+				case tc.expected != nil && result == nil:
 					t.Errorf("%s: expected %v, got nil", tc.description, *tc.expected)
-				} else if tc.expected != nil && result != nil && *tc.expected != *result {
+				case tc.expected != nil && result != nil && *tc.expected != *result:
 					t.Errorf("%s: expected %v, got %v", tc.description, *tc.expected, *result)
 				}
 			},
@@ -221,11 +223,12 @@ func TestExtractAcceptedTermsClaimUnit(t *testing.T) {
 
 				result := challenge.TestExtractAcceptedTermsClaim(tc.traits)
 
-				if tc.expected == nil && result != nil {
+				switch {
+				case tc.expected == nil && result != nil:
 					t.Errorf("%s: expected nil, got %v", tc.description, *result)
-				} else if tc.expected != nil && result == nil {
+				case tc.expected != nil && result == nil:
 					t.Errorf("%s: expected %v, got nil", tc.description, *tc.expected)
-				} else if tc.expected != nil && result != nil && *tc.expected != *result {
+				case tc.expected != nil && result != nil && *tc.expected != *result:
 					t.Errorf("%s: expected %v, got %v", tc.description, *tc.expected, *result)
 				}
 			},

@@ -7,14 +7,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/alkem-io/oidc-service/internal/config"
 	"github.com/alkem-io/oidc-service/internal/maintenance"
-	"github.com/stretchr/testify/require"
 )
 
 func TestMaintenanceMiddlewareAllowsRequestsWhenDisabled(t *testing.T) {
 	handlerCalled := false
-	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		handlerCalled = true
 		w.WriteHeader(http.StatusTeapot)
 	})
@@ -38,7 +39,7 @@ func TestMaintenanceMiddlewareReturnsServiceUnavailable(t *testing.T) {
 		RetryAfter: &retry,
 	})
 
-	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	next := http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		t.Fatalf("next handler should not be called")
 	})
 
@@ -64,12 +65,12 @@ func TestMaintenanceMiddlewareSkipped(t *testing.T) {
 
 	middleware := Maintenance(MaintenanceOptions{
 		State: state,
-		Skip: func(r *http.Request) bool {
+		Skip: func(_ *http.Request) bool {
 			return true
 		},
 	})
 
-	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		called = true
 		w.WriteHeader(http.StatusAccepted)
 	})

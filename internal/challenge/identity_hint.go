@@ -9,6 +9,7 @@ type identityHintContextKey struct{}
 
 // IdentityHintProvider supplies a fallback identity identifier when Hydra omits the subject.
 type IdentityHintProvider interface {
+	// IdentityHint returns the identity ID from the provider.
 	IdentityHint(ctx context.Context) (string, error)
 }
 

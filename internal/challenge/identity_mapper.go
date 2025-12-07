@@ -91,6 +91,9 @@ func (m *IdentityMapper) Fetch(ctx context.Context, identityID string) (*Identit
 	}
 
 	identity, resp, err := m.fetch(ctx, id)
+	if resp != nil {
+		defer func() { _ = resp.Body.Close() }()
+	}
 	if err != nil {
 		if resp != nil && resp.StatusCode == http.StatusNotFound {
 			return nil, &IdentityNotFoundError{IdentityID: id}
@@ -176,8 +179,7 @@ func deriveDisplayName(traits map[string]interface{}) string {
 	}
 
 	if nameValue, ok := traits["name"]; ok {
-		switch name := nameValue.(type) {
-		case map[string]any:
+		if name, ok := nameValue.(map[string]any); ok {
 			first := extractString(name["first"])
 			last := extractString(name["last"])
 			if combined := strings.TrimSpace(strings.TrimSpace(first + " " + last)); combined != "" {

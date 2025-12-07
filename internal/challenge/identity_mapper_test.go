@@ -32,7 +32,7 @@ func TestIdentityMapperFetchSuccess(t *testing.T) {
 	}
 
 	mapper := NewIdentityMapperWithProvider(func(context.Context, string) (*kratosclient.Identity, *http.Response, error) {
-		return identity, &http.Response{StatusCode: http.StatusOK}, nil
+		return identity, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 	})
 
 	profile, err := mapper.Fetch(context.Background(), testIdentityID)
@@ -54,7 +54,7 @@ func TestIdentityMapperMissingTraits(t *testing.T) {
 	})
 
 	mapper := NewIdentityMapperWithProvider(func(context.Context, string) (*kratosclient.Identity, *http.Response, error) {
-		return identity, &http.Response{StatusCode: http.StatusOK}, nil
+		return identity, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 	})
 
 	profile, err := mapper.Fetch(context.Background(), testIdentityID)
@@ -74,7 +74,7 @@ func TestIdentityMapperDisplayNameFallbackFromName(t *testing.T) {
 	})
 
 	mapper := NewIdentityMapperWithProvider(func(context.Context, string) (*kratosclient.Identity, *http.Response, error) {
-		return identity, &http.Response{StatusCode: http.StatusOK}, nil
+		return identity, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 	})
 
 	profile, err := mapper.Fetch(context.Background(), testIdentityID)
@@ -89,7 +89,7 @@ func TestIdentityMapperInvalidEmail(t *testing.T) {
 	})
 
 	mapper := NewIdentityMapperWithProvider(func(context.Context, string) (*kratosclient.Identity, *http.Response, error) {
-		return identity, &http.Response{StatusCode: http.StatusOK}, nil
+		return identity, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 	})
 
 	_, err := mapper.Fetch(context.Background(), testIdentityID)
@@ -100,7 +100,7 @@ func TestIdentityMapperInvalidEmail(t *testing.T) {
 
 func TestIdentityMapperIdentityNotFound(t *testing.T) {
 	mapper := NewIdentityMapperWithProvider(func(context.Context, string) (*kratosclient.Identity, *http.Response, error) {
-		return nil, &http.Response{StatusCode: http.StatusNotFound}, errors.New("not found")
+		return nil, &http.Response{StatusCode: http.StatusNotFound, Body: http.NoBody}, errors.New("not found")
 	})
 
 	_, err := mapper.Fetch(context.Background(), "missing-id")
@@ -112,7 +112,7 @@ func TestIdentityMapperIdentityNotFound(t *testing.T) {
 func TestIdentityMapperLookupFailure(t *testing.T) {
 	lookupErr := errors.New("boom")
 	mapper := NewIdentityMapperWithProvider(func(context.Context, string) (*kratosclient.Identity, *http.Response, error) {
-		return nil, &http.Response{StatusCode: http.StatusInternalServerError}, lookupErr
+		return nil, &http.Response{StatusCode: http.StatusInternalServerError, Body: http.NoBody}, lookupErr
 	})
 
 	_, err := mapper.Fetch(context.Background(), testIdentityID)

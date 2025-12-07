@@ -19,7 +19,7 @@ func TestRunGeneratesReport(t *testing.T) {
 	err := run(context.Background(), []string{"-root", root, "-out", out, "-threshold", "0"}, io.Discard, io.Discard)
 	require.NoError(t, err)
 
-	data, err := os.ReadFile(out)
+	data, err := os.ReadFile(out) //nolint:gosec // test file reading from temp dir
 	require.NoError(t, err)
 
 	var decoded struct {

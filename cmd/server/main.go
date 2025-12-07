@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/alkem-io/oidc-service/internal/alkemio"
 	"github.com/alkem-io/oidc-service/internal/challenge"
 	"github.com/alkem-io/oidc-service/internal/config"
@@ -19,7 +21,6 @@ import (
 	"github.com/alkem-io/oidc-service/internal/maintenance"
 	"github.com/alkem-io/oidc-service/internal/server"
 	"github.com/alkem-io/oidc-service/pkg/telemetry"
-	"go.uber.org/zap"
 )
 
 const (

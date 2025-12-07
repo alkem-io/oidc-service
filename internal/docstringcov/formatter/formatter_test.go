@@ -6,8 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/alkem-io/oidc-service/internal/docstringcov/analyzer"
 	"github.com/stretchr/testify/require"
+
+	"github.com/alkem-io/oidc-service/internal/docstringcov/analyzer"
 )
 
 func TestWriteJSONIncludesAllPackages(t *testing.T) {
@@ -36,7 +37,7 @@ func TestWriteJSONIncludesAllPackages(t *testing.T) {
 	output := filepath.Join(t.TempDir(), "coverage.json")
 	require.NoError(t, WriteJSON(output, res))
 
-	data, err := os.ReadFile(output)
+	data, err := os.ReadFile(output) //nolint:gosec // test file reading from temp dir
 	require.NoError(t, err)
 
 	var decoded struct {

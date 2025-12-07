@@ -7,10 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/alkem-io/oidc-service/internal/config"
 	"github.com/alkem-io/oidc-service/internal/maintenance"
 	"github.com/alkem-io/oidc-service/internal/server"
-	"go.uber.org/zap"
 )
 
 func TestLoginHydraFailureReturnsServerError(t *testing.T) {

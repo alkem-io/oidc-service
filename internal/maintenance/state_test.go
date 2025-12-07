@@ -4,8 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alkem-io/oidc-service/internal/config"
 	"github.com/stretchr/testify/require"
+
+	"github.com/alkem-io/oidc-service/internal/config"
 )
 
 func TestStateSnapshotReflectsUpdates(t *testing.T) {

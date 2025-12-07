@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alkem-io/oidc-service/internal/challenge"
 	"github.com/stretchr/testify/require"
+
+	"github.com/alkem-io/oidc-service/internal/challenge"
 )
 
 func TestSessionResolverIdentityIDSuccess(t *testing.T) {
@@ -31,7 +32,7 @@ func TestSessionResolverIdentityIDSuccess(t *testing.T) {
 }
 
 func TestSessionResolverIdentityIDUnauthorized(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	defer server.Close()
@@ -64,7 +65,7 @@ func TestSessionResolverIdentityIDCustomCookieName(t *testing.T) {
 }
 
 func TestSessionResolverIdentityIDServerError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer server.Close()

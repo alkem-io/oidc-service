@@ -2,6 +2,7 @@ package contract_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 
@@ -33,11 +34,11 @@ func TestConsentAddsAlkemioUserIDClaim(t *testing.T) {
 	)
 
 	hydraStub := &testsupport.HydraClientStub{
-		GetConsentFunc: func(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
+		GetConsentFunc: func(_ context.Context, challengeID string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
 			require.Equal(t, contractConsentChallenge, challengeID, "unexpected challenge id")
-			return consent, &http.Response{StatusCode: http.StatusOK}, nil
+			return consent, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 		},
-		AcceptConsentFunc: func(ctx context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
+		AcceptConsentFunc: func(_ context.Context, _ string, body *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
 			session := body.GetSession()
 			if token := session.GetAccessToken(); token != nil {
 				if claims, ok := token.(map[string]any); ok {
@@ -49,12 +50,12 @@ func TestConsentAddsAlkemioUserIDClaim(t *testing.T) {
 					capturedID = claims
 				}
 			}
-			return hydraAdmin.NewOAuth2RedirectTo("https://app.example/callback"), &http.Response{StatusCode: http.StatusOK}, nil
+			return hydraAdmin.NewOAuth2RedirectTo("https://app.example/callback"), &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 		},
 	}
 
 	identityStub := testsupport.IdentityFetcherStub{
-		FetchFunc: func(ctx context.Context, identityID string) (*challenge.IdentityProfile, error) {
+		FetchFunc: func(_ context.Context, identityID string) (*challenge.IdentityProfile, error) {
 			require.Equal(t, contractKratosID, identityID, "unexpected identity id")
 			return &challenge.IdentityProfile{
 				ID:          identityID,
@@ -65,7 +66,7 @@ func TestConsentAddsAlkemioUserIDClaim(t *testing.T) {
 	}
 
 	resolverStub := testsupport.AlkemioResolverStub{
-		ResolveFunc: func(ctx context.Context, authenticationID string) (*alkemio.IdentityMapping, error) {
+		ResolveFunc: func(_ context.Context, authenticationID string) (*alkemio.IdentityMapping, error) {
 			require.Equal(t, contractKratosID, authenticationID, "unexpected authentication id")
 			return testsupport.NewAlkemioMapping(contractUserID, contractAgentID), nil
 		},
@@ -99,17 +100,17 @@ func TestConsentFailsWhenAlkemioIdentityMissing(t *testing.T) {
 	consent.SetSubject(contractKratosID)
 
 	hydraStub := &testsupport.HydraClientStub{
-		GetConsentFunc: func(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
-			return consent, &http.Response{StatusCode: http.StatusOK}, nil
+		GetConsentFunc: func(_ context.Context, _ string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
+			return consent, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 		},
-		AcceptConsentFunc: func(ctx context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
+		AcceptConsentFunc: func(_ context.Context, _ string, _ *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
 			t.Fatal("accept consent should not be called when resolution fails")
 			return nil, nil, nil
 		},
 	}
 
 	identityStub := testsupport.IdentityFetcherStub{
-		FetchFunc: func(ctx context.Context, identityID string) (*challenge.IdentityProfile, error) {
+		FetchFunc: func(_ context.Context, identityID string) (*challenge.IdentityProfile, error) {
 			return &challenge.IdentityProfile{
 				ID:          identityID,
 				Email:       "user@example.com",
@@ -119,7 +120,7 @@ func TestConsentFailsWhenAlkemioIdentityMissing(t *testing.T) {
 	}
 
 	resolverStub := testsupport.AlkemioResolverStub{
-		ResolveFunc: func(ctx context.Context, authenticationID string) (*alkemio.IdentityMapping, error) {
+		ResolveFunc: func(_ context.Context, _ string) (*alkemio.IdentityMapping, error) {
 			return nil, alkemio.ErrNotFound
 		},
 	}
@@ -138,8 +139,8 @@ func TestConsentFailsWhenAlkemioIdentityMissing(t *testing.T) {
 		t.Fatal("expected error when alkemio identity missing")
 	}
 
-	challengeErr, ok := err.(challenge.Error)
-	if !ok {
+	var challengeErr challenge.Error
+	if !errors.As(err, &challengeErr) {
 		t.Fatalf("expected challenge.Error, got %T", err)
 	}
 	if challengeErr.Code() != "alkemio_identity_missing" {

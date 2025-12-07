@@ -22,6 +22,7 @@ const (
 
 // HTTPDoer abstracts the http.Client Do method for easier testing.
 type HTTPDoer interface {
+	// Do sends an HTTP request and returns an HTTP response.
 	Do(req *http.Request) (*http.Response, error)
 }
 

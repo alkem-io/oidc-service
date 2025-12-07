@@ -20,7 +20,7 @@ func WriteJSON(path string, res *analyzer.Result) error {
 		return errors.New("output path is required")
 	}
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return fmt.Errorf("create coverage directory: %w", err)
 	}
 	payload, err := json.MarshalIndent(res, "", "  ")
@@ -28,7 +28,7 @@ func WriteJSON(path string, res *analyzer.Result) error {
 		return fmt.Errorf("marshal coverage report: %w", err)
 	}
 	payload = append(payload, '\n')
-	if err := os.WriteFile(path, payload, 0o644); err != nil {
+	if err := os.WriteFile(path, payload, 0o600); err != nil {
 		return fmt.Errorf("write coverage report: %w", err)
 	}
 	return nil

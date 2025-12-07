@@ -11,7 +11,9 @@ import (
 type FlowType string
 
 const (
-	FlowLogin   FlowType = "login"
+	// FlowLogin represents the login challenge flow.
+	FlowLogin FlowType = "login"
+	// FlowConsent represents the consent challenge flow.
 	FlowConsent FlowType = "consent"
 )
 
@@ -107,23 +109,31 @@ type ReadinessState struct {
 
 // Service defines behaviour for resolving Hydra challenges.
 type Service interface {
+	// ResolveLogin completes the login challenge.
 	ResolveLogin(ctx context.Context, challengeID string) (*Resolution, error)
+	// ResolveConsent completes the consent challenge.
 	ResolveConsent(ctx context.Context, challengeID string) (*Resolution, error)
+	// Readiness checks the service health.
 	Readiness(ctx context.Context) ReadinessState
 }
 
 // Error models domain failures surfaced to HTTP.
 type Error interface {
 	error
+	// StatusCode returns the HTTP status code.
 	StatusCode() int
+	// Code returns the error code.
 	Code() string
+	// ChallengeID returns the challenge ID.
 	ChallengeID() string
+	// MissingTraits returns the missing traits.
 	MissingTraits() []string
+	// Timestamp returns the error timestamp.
 	Timestamp() time.Time
 }
 
-// ChallengeError provides a canonical domain error implementation.
-type ChallengeError struct {
+// BaseError provides a canonical domain error implementation.
+type BaseError struct {
 	status        int
 	code          string
 	message       string
@@ -132,9 +142,9 @@ type ChallengeError struct {
 	timestamp     time.Time
 }
 
-// NewError constructs a ChallengeError instance with the supplied metadata.
-func NewError(status int, code, message, challengeID string, missing []string) *ChallengeError {
-	return &ChallengeError{
+// NewError constructs a BaseError instance with the supplied metadata.
+func NewError(status int, code, message, challengeID string, missing []string) *BaseError {
+	return &BaseError{
 		status:        status,
 		code:          code,
 		message:       message,
@@ -145,42 +155,42 @@ func NewError(status int, code, message, challengeID string, missing []string) *
 }
 
 // Error returns the canonical error message.
-func (e *ChallengeError) Error() string {
+func (e *BaseError) Error() string {
 	return e.message
 }
 
 // StatusCode exposes the HTTP status associated with the error.
-func (e *ChallengeError) StatusCode() int {
+func (e *BaseError) StatusCode() int {
 	return e.status
 }
 
 // Code returns the stable machine-readable error code.
-func (e *ChallengeError) Code() string {
+func (e *BaseError) Code() string {
 	return e.code
 }
 
 // ChallengeID returns the Hydra challenge identifier related to the error, if any.
-func (e *ChallengeError) ChallengeID() string {
+func (e *BaseError) ChallengeID() string {
 	return e.challengeID
 }
 
 // MissingTraits returns a copy of the traits that were absent from the identity payload.
-func (e *ChallengeError) MissingTraits() []string {
+func (e *BaseError) MissingTraits() []string {
 	return append([]string(nil), e.missingTraits...)
 }
 
 // Timestamp indicates when the error instance was created.
-func (e *ChallengeError) Timestamp() time.Time {
+func (e *BaseError) Timestamp() time.Time {
 	return e.timestamp
 }
 
 // NewMissingTraitsError reports that Kratos omitted required identity traits.
-func NewMissingTraitsError(challengeID string, traits []string) *ChallengeError {
+func NewMissingTraitsError(challengeID string, traits []string) *BaseError {
 	return NewError(http.StatusBadRequest, "missing_traits", "identity is missing required traits", challengeID, traits)
 }
 
 // NewHydraFailureError reports failures communicating with Hydra.
-func NewHydraFailureError(challengeID, message string) *ChallengeError {
+func NewHydraFailureError(challengeID, message string) *BaseError {
 	if message == "" {
 		message = "failed to resolve hydra challenge"
 	}
@@ -188,12 +198,12 @@ func NewHydraFailureError(challengeID, message string) *ChallengeError {
 }
 
 // NewInvalidChallengeError indicates Hydra rejected the provided challenge identifier.
-func NewInvalidChallengeError(challengeID string) *ChallengeError {
+func NewInvalidChallengeError(challengeID string) *BaseError {
 	return NewError(http.StatusNotFound, "invalid_challenge", "challenge not found", challengeID, nil)
 }
 
 // NewMaintenanceError signals to callers that the service is intentionally unavailable.
-func NewMaintenanceError(message string) *ChallengeError {
+func NewMaintenanceError(message string) *BaseError {
 	if message == "" {
 		message = "service is in maintenance mode"
 	}
@@ -201,7 +211,7 @@ func NewMaintenanceError(message string) *ChallengeError {
 }
 
 // NewKratosFailureError reports failures retrieving or validating identity data from Kratos.
-func NewKratosFailureError(challengeID, message string) *ChallengeError {
+func NewKratosFailureError(challengeID, message string) *BaseError {
 	if message == "" {
 		message = "failed to resolve identity traits"
 	}
@@ -209,12 +219,12 @@ func NewKratosFailureError(challengeID, message string) *ChallengeError {
 }
 
 // NewAlkemioIdentityMissingError reports that the Alkemio resolver did not find the identity mapping.
-func NewAlkemioIdentityMissingError(challengeID string) *ChallengeError {
+func NewAlkemioIdentityMissingError(challengeID string) *BaseError {
 	return NewError(http.StatusForbidden, "alkemio_identity_missing", "alkemio user mapping not found", challengeID, nil)
 }
 
 // NewAlkemioResolutionError reports a general failure talking to the Alkemio resolver.
-func NewAlkemioResolutionError(challengeID, message string) *ChallengeError {
+func NewAlkemioResolutionError(challengeID, message string) *BaseError {
 	if strings.TrimSpace(message) == "" {
 		message = "failed to resolve alkemio user id"
 	}

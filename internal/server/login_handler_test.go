@@ -23,7 +23,7 @@ const (
 
 func TestLoginHandlerRedirectsOnSuccess(t *testing.T) {
 	svc := &challengeServiceStub{
-		resolveLogin: func(ctx context.Context, challengeID string) (*challenge.Resolution, error) {
+		resolveLogin: func(_ context.Context, challengeID string) (*challenge.Resolution, error) {
 			require.Equal(t, "test-challenge", challengeID)
 			return &challenge.Resolution{RedirectURL: "https://redirect.example"}, nil
 		},
@@ -63,7 +63,7 @@ func TestLoginHandlerMissingChallengeReturnsBadRequest(t *testing.T) {
 
 func TestLoginHandlerPropagatesServiceError(t *testing.T) {
 	svc := &challengeServiceStub{
-		resolveLogin: func(ctx context.Context, challengeID string) (*challenge.Resolution, error) {
+		resolveLogin: func(_ context.Context, challengeID string) (*challenge.Resolution, error) {
 			return nil, challenge.NewInvalidChallengeError(challengeID)
 		},
 	}
@@ -109,7 +109,7 @@ func TestLoginHandlerReturnsAlkemioErrors(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			svc := &challengeServiceStub{
-				resolveLogin: func(ctx context.Context, challengeID string) (*challenge.Resolution, error) {
+				resolveLogin: func(_ context.Context, challengeID string) (*challenge.Resolution, error) {
 					return nil, tc.errorFn(challengeID)
 				},
 			}
@@ -135,7 +135,7 @@ func TestLoginHandlerProvidesSessionHint(t *testing.T) {
 	handler := NewLoginHandler(LoginHandlerConfig{
 		Logger: zap.NewNop(),
 		Challenge: &challengeServiceStub{
-			resolveLogin: func(ctx context.Context, challengeID string) (*challenge.Resolution, error) {
+			resolveLogin: func(ctx context.Context, _ string) (*challenge.Resolution, error) {
 				provider := challenge.IdentityHintProviderFromContext(ctx)
 				require.NotNil(t, provider)
 				id, err := provider.IdentityHint(ctx)
@@ -144,7 +144,7 @@ func TestLoginHandlerProvidesSessionHint(t *testing.T) {
 				return &challenge.Resolution{RedirectURL: "https://redirect"}, nil
 			},
 		},
-		SessionResolver: sessionResolverStub{resolve: func(ctx context.Context, session string) (string, error) {
+		SessionResolver: sessionResolverStub{resolve: func(_ context.Context, session string) (string, error) {
 			resolverCalled = true
 			require.Equal(t, "session-token", session)
 			return "identity-id", nil
@@ -165,13 +165,13 @@ func TestLoginHandlerMissingSessionCreatesHintProvider(t *testing.T) {
 	handler := NewLoginHandler(LoginHandlerConfig{
 		Logger: zap.NewNop(),
 		Challenge: &challengeServiceStub{
-			resolveLogin: func(ctx context.Context, challengeID string) (*challenge.Resolution, error) {
+			resolveLogin: func(ctx context.Context, cid string) (*challenge.Resolution, error) {
 				provider := challenge.IdentityHintProviderFromContext(ctx)
 				require.NotNil(t, provider)
 				_, err := provider.IdentityHint(ctx)
 				require.Error(t, err)
 				require.ErrorIs(t, err, challenge.ErrIdentitySessionRequired)
-				return nil, challenge.NewSessionRequiredError(challengeID)
+				return nil, challenge.NewSessionRequiredError(cid)
 			},
 		},
 		SessionResolver: sessionResolverStub{},
@@ -193,7 +193,7 @@ func TestLoginHandlerRedirectsToKratosLoginWhenSessionRequired(t *testing.T) {
 	handler := NewLoginHandler(LoginHandlerConfig{
 		Logger: zap.NewNop(),
 		Challenge: &challengeServiceStub{
-			resolveLogin: func(ctx context.Context, challengeID string) (*challenge.Resolution, error) {
+			resolveLogin: func(_ context.Context, challengeID string) (*challenge.Resolution, error) {
 				return nil, challenge.NewSessionRequiredError(challengeID)
 			},
 		},
@@ -215,7 +215,7 @@ func TestLoginHandlerRedirectsToKratosLoginWhenSessionInvalid(t *testing.T) {
 	handler := NewLoginHandler(LoginHandlerConfig{
 		Logger: zap.NewNop(),
 		Challenge: &challengeServiceStub{
-			resolveLogin: func(ctx context.Context, challengeID string) (*challenge.Resolution, error) {
+			resolveLogin: func(_ context.Context, challengeID string) (*challenge.Resolution, error) {
 				return nil, challenge.NewSessionInvalidError(challengeID)
 			},
 		},
@@ -237,7 +237,7 @@ func TestLoginHandlerRedirectsToKratosLoginWithForwardedPrefix(t *testing.T) {
 	handler := NewLoginHandler(LoginHandlerConfig{
 		Logger: zap.NewNop(),
 		Challenge: &challengeServiceStub{
-			resolveLogin: func(ctx context.Context, challengeID string) (*challenge.Resolution, error) {
+			resolveLogin: func(_ context.Context, challengeID string) (*challenge.Resolution, error) {
 				return nil, challenge.NewSessionRequiredError(challengeID)
 			},
 		},
@@ -261,7 +261,7 @@ func TestLoginHandlerRedirectsWithReturnBaseURLOverride(t *testing.T) {
 	handler := NewLoginHandler(LoginHandlerConfig{
 		Logger: zap.NewNop(),
 		Challenge: &challengeServiceStub{
-			resolveLogin: func(ctx context.Context, challengeID string) (*challenge.Resolution, error) {
+			resolveLogin: func(_ context.Context, challengeID string) (*challenge.Resolution, error) {
 				return nil, challenge.NewSessionRequiredError(challengeID)
 			},
 		},
@@ -285,7 +285,7 @@ func TestLoginHandlerRedirectsToKratosLoginWithLoopbackHost(t *testing.T) {
 	handler := NewLoginHandler(LoginHandlerConfig{
 		Logger: zap.NewNop(),
 		Challenge: &challengeServiceStub{
-			resolveLogin: func(ctx context.Context, challengeID string) (*challenge.Resolution, error) {
+			resolveLogin: func(_ context.Context, challengeID string) (*challenge.Resolution, error) {
 				return nil, challenge.NewSessionRequiredError(challengeID)
 			},
 		},
@@ -308,7 +308,7 @@ func TestLoginHandlerRedirectsToKratosLoginWithBrowserPathPrefix(t *testing.T) {
 	handler := NewLoginHandler(LoginHandlerConfig{
 		Logger: zap.NewNop(),
 		Challenge: &challengeServiceStub{
-			resolveLogin: func(ctx context.Context, challengeID string) (*challenge.Resolution, error) {
+			resolveLogin: func(_ context.Context, challengeID string) (*challenge.Resolution, error) {
 				return nil, challenge.NewSessionRequiredError(challengeID)
 			},
 		},

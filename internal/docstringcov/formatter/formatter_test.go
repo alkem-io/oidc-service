@@ -36,7 +36,7 @@ func TestWriteJSONIncludesAllPackages(t *testing.T) {
 	output := filepath.Join(t.TempDir(), "coverage.json")
 	require.NoError(t, WriteJSON(output, res))
 
-	data, err := os.ReadFile(output)
+	data, err := os.ReadFile(output) //nolint:gosec // test file reading from temp dir
 	require.NoError(t, err)
 
 	var decoded struct {

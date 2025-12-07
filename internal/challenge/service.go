@@ -22,11 +22,15 @@ const (
 
 // HydraClient captures the Hydra Admin interactions required to resolve challenges.
 type HydraClient interface {
+	// GetLoginRequest retrieves the login request from Hydra.
 	GetLoginRequest(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2LoginRequest, *http.Response, error)
+	// AcceptLoginRequest accepts the login request in Hydra.
 	AcceptLoginRequest(
 		ctx context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2LoginRequest,
 	) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error)
+	// GetConsentRequest retrieves the consent request from Hydra.
 	GetConsentRequest(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error)
+	// AcceptConsentRequest accepts the consent request in Hydra.
 	AcceptConsentRequest(
 		ctx context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2ConsentRequest,
 	) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error)
@@ -34,11 +38,13 @@ type HydraClient interface {
 
 // IdentityFetcher retrieves identity profiles given a Kratos identifier.
 type IdentityFetcher interface {
+	// Fetch retrieves the identity profile.
 	Fetch(ctx context.Context, identityID string) (*IdentityProfile, error)
 }
 
 // AlkemioResolver resolves internal Alkemio user/agent identifiers from Kratos identities.
 type AlkemioResolver interface {
+	// Resolve resolves the Alkemio identity mapping.
 	Resolve(ctx context.Context, authenticationID string) (*alkemio.IdentityMapping, error)
 }
 
@@ -57,9 +63,13 @@ type Options struct {
 
 // Logger defines the logging interface used by the challenge service.
 type Logger interface {
+	// Info logs an info message.
 	Info(msg string, fields ...interface{})
+	// Warn logs a warning message.
 	Warn(msg string, fields ...interface{})
+	// Error logs an error message.
 	Error(msg string, fields ...interface{})
+	// Debug logs a debug message.
 	Debug(msg string, fields ...interface{})
 }
 
@@ -100,7 +110,9 @@ type service struct {
 
 // ReadinessProbe evaluates upstream availability for readiness reporting.
 type ReadinessProbe interface {
+	// Ready checks if the probe is ready.
 	Ready(ctx context.Context) error
+	// Version returns the version of the probed service.
 	Version(ctx context.Context) (string, error)
 }
 
@@ -175,6 +187,9 @@ func (s *service) ResolveLogin(ctx context.Context, challengeID string) (*Resolu
 	}
 
 	req, resp, err := s.hydra.GetLoginRequest(ctx, challengeID)
+	if resp != nil {
+		defer func() { _ = resp.Body.Close() }()
+	}
 	if err != nil {
 		return nil, mapHydraError(FlowLogin, challengeID, resp, err)
 	}
@@ -183,58 +198,76 @@ func (s *service) ResolveLogin(ctx context.Context, challengeID string) (*Resolu
 	}
 
 	if req.GetSkip() {
-		contextData := readLoginContext(req)
-		subject := strings.TrimSpace(req.GetSubject())
-
-		if ctxID := readIdentityID(contextData); ctxID != "" {
-			subject = ctxID
-		}
-
-		if subject == "" {
-			return nil, NewHydraFailureError(challengeID, "hydra login request missing subject for skip flow")
-		}
-
-		if !isKratosIdentityID(subject) {
-			if provider := IdentityHintProviderFromContext(ctx); provider != nil {
-				identityID, err := provider.IdentityHint(ctx)
-				if err != nil {
-					return nil, mapIdentityHintError(challengeID, err)
-				}
-
-				identityID = strings.TrimSpace(identityID)
-				if identityID == "" {
-					return nil, NewSessionInvalidError(challengeID)
-				}
-
-				if !isKratosIdentityID(identityID) {
-					return nil, NewSessionInvalidError(challengeID)
-				}
-
-				subject = identityID
-			}
-		}
-
-		if !isKratosIdentityID(subject) {
-			return nil, NewSessionInvalidError(challengeID)
-		}
-
-		contextData = ensureLoginContextIdentity(contextData, subject)
-
-		payload := hydraAdmin.NewAcceptOAuth2LoginRequest(subject)
-		payload.SetRemember(true)
-		payload.SetRememberFor(s.rememberFor)
-		if contextMap, ok := contextData.(map[string]any); ok {
-			payload.SetContext(contextMap)
-		}
-
-		redirect, resp, err := s.hydra.AcceptLoginRequest(ctx, challengeID, payload)
-		if err != nil {
-			return nil, mapHydraError(FlowLogin, challengeID, resp, err)
-		}
-
-		return resolutionFromRedirect(challengeID, redirect)
+		return s.resolveLoginSkip(ctx, challengeID, req)
 	}
 
+	return s.resolveLoginStandard(ctx, challengeID, req)
+}
+
+func (s *service) resolveLoginSkip(ctx context.Context, challengeID string, req *hydraAdmin.OAuth2LoginRequest) (*Resolution, error) {
+	contextData := readLoginContext(req)
+	subject, err := s.determineSkipSubject(ctx, challengeID, req, contextData)
+	if err != nil {
+		return nil, err
+	}
+
+	contextData = ensureLoginContextIdentity(contextData, subject)
+
+	payload := hydraAdmin.NewAcceptOAuth2LoginRequest(subject)
+	payload.SetRemember(true)
+	payload.SetRememberFor(s.rememberFor)
+	if contextMap, ok := contextData.(map[string]any); ok {
+		payload.SetContext(contextMap)
+	}
+
+	redirect, resp, err := s.hydra.AcceptLoginRequest(ctx, challengeID, payload)
+	if resp != nil {
+		defer func() { _ = resp.Body.Close() }()
+	}
+	if err != nil {
+		return nil, mapHydraError(FlowLogin, challengeID, resp, err)
+	}
+
+	return resolutionFromRedirect(challengeID, redirect)
+}
+
+func (s *service) determineSkipSubject(ctx context.Context, challengeID string, req *hydraAdmin.OAuth2LoginRequest, contextData interface{}) (string, error) {
+	subject := strings.TrimSpace(req.GetSubject())
+
+	if ctxID := readIdentityID(contextData); ctxID != "" {
+		subject = ctxID
+	}
+
+	if subject == "" {
+		return "", NewHydraFailureError(challengeID, "hydra login request missing subject for skip flow")
+	}
+
+	if isKratosIdentityID(subject) {
+		return subject, nil
+	}
+
+	if provider := IdentityHintProviderFromContext(ctx); provider != nil {
+		identityID, err := provider.IdentityHint(ctx)
+		if err != nil {
+			return "", mapIdentityHintError(challengeID, err)
+		}
+
+		identityID = strings.TrimSpace(identityID)
+		if identityID == "" {
+			return "", NewSessionInvalidError(challengeID)
+		}
+
+		if !isKratosIdentityID(identityID) {
+			return "", NewSessionInvalidError(challengeID)
+		}
+
+		return identityID, nil
+	}
+
+	return "", NewSessionInvalidError(challengeID)
+}
+
+func (s *service) resolveLoginStandard(ctx context.Context, challengeID string, req *hydraAdmin.OAuth2LoginRequest) (*Resolution, error) {
 	identityID := strings.TrimSpace(req.GetSubject())
 	if identityID == "" {
 		provider := IdentityHintProviderFromContext(ctx)
@@ -264,6 +297,9 @@ func (s *service) ResolveLogin(ctx context.Context, challengeID string) (*Resolu
 	payload.SetContext(buildLoginContext(profile))
 
 	redirect, resp, err := s.hydra.AcceptLoginRequest(ctx, challengeID, payload)
+	if resp != nil {
+		defer func() { _ = resp.Body.Close() }()
+	}
 	if err != nil {
 		return nil, mapHydraError(FlowLogin, challengeID, resp, err)
 	}
@@ -279,6 +315,9 @@ func (s *service) ResolveConsent(ctx context.Context, challengeID string) (*Reso
 	}
 
 	req, resp, err := s.hydra.GetConsentRequest(ctx, challengeID)
+	if resp != nil {
+		defer func() { _ = resp.Body.Close() }()
+	}
 	if err != nil {
 		return nil, mapHydraError(FlowConsent, challengeID, resp, err)
 	}
@@ -314,6 +353,9 @@ func (s *service) ResolveConsent(ctx context.Context, challengeID string) (*Reso
 	payload.SetSession(*session)
 
 	redirect, resp, err := s.hydra.AcceptConsentRequest(ctx, challengeID, payload)
+	if resp != nil {
+		defer func() { _ = resp.Body.Close() }()
+	}
 	if err != nil {
 		return nil, mapHydraError(FlowConsent, challengeID, resp, err)
 	}
@@ -444,16 +486,19 @@ func mapHydraError(flow FlowType, challengeID string, resp *http.Response, err e
 }
 
 func mapIdentityError(challengeID string, err error) error {
-	switch e := err.(type) {
-	case *MissingTraitsError:
-		return NewMissingTraitsError(challengeID, e.Traits)
-	case *IdentityNotFoundError:
-		return NewKratosFailureError(challengeID, e.Error())
-	case *IdentityLookupError:
-		return NewKratosFailureError(challengeID, e.Error())
-	default:
-		return NewKratosFailureError(challengeID, err.Error())
+	var missingTraitsErr *MissingTraitsError
+	if errors.As(err, &missingTraitsErr) {
+		return NewMissingTraitsError(challengeID, missingTraitsErr.Traits)
 	}
+	var identityNotFoundErr *IdentityNotFoundError
+	if errors.As(err, &identityNotFoundErr) {
+		return NewKratosFailureError(challengeID, identityNotFoundErr.Error())
+	}
+	var identityLookupErr *IdentityLookupError
+	if errors.As(err, &identityLookupErr) {
+		return NewKratosFailureError(challengeID, identityLookupErr.Error())
+	}
+	return NewKratosFailureError(challengeID, err.Error())
 }
 
 func mapIdentityHintError(challengeID string, err error) error {
@@ -703,8 +748,7 @@ func extractIdentityID(req *hydraAdmin.OAuth2ConsentRequest) string {
 }
 
 func readIdentityID(ctx interface{}) string {
-	switch value := ctx.(type) {
-	case map[string]any:
+	if value, ok := ctx.(map[string]any); ok {
 		if id, ok := value[identityContextKey]; ok {
 			return strings.TrimSpace(fmt.Sprint(id))
 		}

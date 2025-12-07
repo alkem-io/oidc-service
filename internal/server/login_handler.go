@@ -16,6 +16,7 @@ import (
 
 // SessionIdentityResolver resolves a Kratos session cookie into an identity identifier.
 type SessionIdentityResolver interface {
+	// IdentityID returns the identity ID associated with the session cookie.
 	IdentityID(ctx context.Context, sessionCookie string) (string, error)
 }
 
@@ -168,7 +169,7 @@ func (h *LoginHandler) buildHintProvider(r *http.Request) challenge.IdentityHint
 }
 
 func (h *LoginHandler) handleSessionRedirect(
-	w http.ResponseWriter, r *http.Request, challengeID string, started time.Time, err error,
+	w http.ResponseWriter, r *http.Request, challengeID string, _ time.Time, err error,
 ) bool {
 	if w == nil || r == nil {
 		return false

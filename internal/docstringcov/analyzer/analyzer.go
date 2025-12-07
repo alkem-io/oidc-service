@@ -221,46 +221,8 @@ func collectSymbols(pkg *packages.Package, root string) []symbolRecord {
 
 	for i, file := range files {
 		filename := filePathAtIndex(compiled, goFiles, i)
-		for _, decl := range file.Decls {
-			switch node := decl.(type) {
-			case *ast.FuncDecl:
-				if node.Name == nil || !node.Name.IsExported() {
-					continue
-				}
-				kind := kindFunc
-				if node.Recv != nil {
-					kind = kindMethod
-				}
-				symbols = append(symbols, symbolRecord{
-					name: node.Name.Name,
-					kind: kind,
-					file: relativePath(root, filename),
-					line: fset.Position(node.Pos()).Line,
-					doc:  node.Doc,
-				})
-			case *ast.GenDecl:
-				if node.Tok != token.TYPE {
-					continue
-				}
-				for _, spec := range node.Specs {
-					typeSpec, ok := spec.(*ast.TypeSpec)
-					if !ok || typeSpec.Name == nil || !typeSpec.Name.IsExported() {
-						continue
-					}
-					doc := typeSpec.Doc
-					if doc == nil {
-						doc = node.Doc
-					}
-					symbols = append(symbols, symbolRecord{
-						name: typeSpec.Name.Name,
-						kind: kindType,
-						file: relativePath(root, filename),
-						line: fset.Position(typeSpec.Pos()).Line,
-						doc:  doc,
-					})
-				}
-			}
-		}
+		symbols = append(symbols, collectFileSymbols(file, fset, root, filename)...)
+
 		if packageDoc == nil && file.Doc != nil {
 			packageDoc = file.Doc
 			firstLine = fset.Position(packageDoc.Pos()).Line
@@ -281,6 +243,63 @@ func collectSymbols(pkg *packages.Package, root string) []symbolRecord {
 		doc:  packageDoc,
 	})
 
+	return symbols
+}
+
+func collectFileSymbols(file *ast.File, fset *token.FileSet, root, filename string) []symbolRecord {
+	symbols := make([]symbolRecord, 0, len(file.Decls))
+	for _, decl := range file.Decls {
+		switch node := decl.(type) {
+		case *ast.FuncDecl:
+			if sym := collectFuncSymbol(node, fset, root, filename); sym != nil {
+				symbols = append(symbols, *sym)
+			}
+		case *ast.GenDecl:
+			symbols = append(symbols, collectGenSymbols(node, fset, root, filename)...)
+		}
+	}
+	return symbols
+}
+
+func collectFuncSymbol(node *ast.FuncDecl, fset *token.FileSet, root, filename string) *symbolRecord {
+	if node.Name == nil || !node.Name.IsExported() {
+		return nil
+	}
+	kind := kindFunc
+	if node.Recv != nil {
+		kind = kindMethod
+	}
+	return &symbolRecord{
+		name: node.Name.Name,
+		kind: kind,
+		file: relativePath(root, filename),
+		line: fset.Position(node.Pos()).Line,
+		doc:  node.Doc,
+	}
+}
+
+func collectGenSymbols(node *ast.GenDecl, fset *token.FileSet, root, filename string) []symbolRecord {
+	symbols := make([]symbolRecord, 0, len(node.Specs))
+	if node.Tok != token.TYPE {
+		return nil
+	}
+	for _, spec := range node.Specs {
+		typeSpec, ok := spec.(*ast.TypeSpec)
+		if !ok || typeSpec.Name == nil || !typeSpec.Name.IsExported() {
+			continue
+		}
+		doc := typeSpec.Doc
+		if doc == nil {
+			doc = node.Doc
+		}
+		symbols = append(symbols, symbolRecord{
+			name: typeSpec.Name.Name,
+			kind: kindType,
+			file: relativePath(root, filename),
+			line: fset.Position(typeSpec.Pos()).Line,
+			doc:  doc,
+		})
+	}
 	return symbols
 }
 

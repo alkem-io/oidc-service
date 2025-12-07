@@ -14,7 +14,7 @@ import (
 
 func TestConsentHandlerRedirectsOnSuccess(t *testing.T) {
 	svc := &challengeServiceStub{
-		resolveConsent: func(ctx context.Context, challengeID string) (*challenge.Resolution, error) {
+		resolveConsent: func(_ context.Context, challengeID string) (*challenge.Resolution, error) {
 			require.Equal(t, "consent-123", challengeID)
 			return &challenge.Resolution{RedirectURL: "https://consent.redirect"}, nil
 		},
@@ -48,7 +48,7 @@ func TestConsentHandlerMissingChallengeReturnsBadRequest(t *testing.T) {
 
 func TestConsentHandlerPropagatesServiceError(t *testing.T) {
 	svc := &challengeServiceStub{
-		resolveConsent: func(ctx context.Context, challengeID string) (*challenge.Resolution, error) {
+		resolveConsent: func(_ context.Context, challengeID string) (*challenge.Resolution, error) {
 			return nil, challenge.NewInvalidChallengeError(challengeID)
 		},
 	}
@@ -91,7 +91,7 @@ func TestConsentHandlerReturnsAlkemioErrors(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			svc := &challengeServiceStub{
-				resolveConsent: func(ctx context.Context, challengeID string) (*challenge.Resolution, error) {
+				resolveConsent: func(_ context.Context, challengeID string) (*challenge.Resolution, error) {
 					return nil, tc.errorFn(challengeID)
 				},
 			}

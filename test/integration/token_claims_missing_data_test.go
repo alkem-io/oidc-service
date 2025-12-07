@@ -179,38 +179,28 @@ func TestTokenClaimsPartialMissingData(t *testing.T) {
 			claims := testsupport.ExtractTokenClaimsFromJSON(t, tc.identityJSON)
 			idToken := claims.ToIDTokenMap()
 
-			if tc.expectedGiven == nil {
-				if claims.GivenName != nil {
-					t.Fatalf("%s: unexpected given_name %q", tc.description, *claims.GivenName)
-				}
-				if _, ok := idToken["given_name"]; ok {
-					t.Fatalf("%s: given_name should be absent in ID token", tc.description)
-				}
-			} else {
-				if claims.GivenName == nil || *claims.GivenName != *tc.expectedGiven {
-					t.Fatalf("%s: expected given_name=%q, got %v", tc.description, *tc.expectedGiven, claims.GivenName)
-				}
-				if idVal, ok := idToken["given_name"].(string); !ok || idVal != *tc.expectedGiven {
-					t.Fatalf("%s: ID token given_name mismatch", tc.description)
-				}
-			}
-
-			if tc.expectedLast == nil {
-				if claims.FamilyName != nil {
-					t.Fatalf("%s: unexpected family_name %q", tc.description, *claims.FamilyName)
-				}
-				if _, ok := idToken["family_name"]; ok {
-					t.Fatalf("%s: family_name should be absent in ID token", tc.description)
-				}
-			} else {
-				if claims.FamilyName == nil || *claims.FamilyName != *tc.expectedLast {
-					t.Fatalf("%s: expected family_name=%q, got %v", tc.description, *tc.expectedLast, claims.FamilyName)
-				}
-				if idVal, ok := idToken["family_name"].(string); !ok || idVal != *tc.expectedLast {
-					t.Fatalf("%s: ID token family_name mismatch", tc.description)
-				}
-			}
+			assertClaim(t, tc.description, "given_name", tc.expectedGiven, claims.GivenName, idToken)
+			assertClaim(t, tc.description, "family_name", tc.expectedLast, claims.FamilyName, idToken)
 		})
+	}
+}
+
+func assertClaim(t *testing.T, description, claimName string, expected *string, actual *string, tokenMap map[string]any) {
+	t.Helper()
+	if expected == nil {
+		if actual != nil {
+			t.Fatalf("%s: unexpected %s %q", description, claimName, *actual)
+		}
+		if _, ok := tokenMap[claimName]; ok {
+			t.Fatalf("%s: %s should be absent in ID token", description, claimName)
+		}
+	} else {
+		if actual == nil || *actual != *expected {
+			t.Fatalf("%s: expected %s=%q, got %v", description, claimName, *expected, actual)
+		}
+		if idVal, ok := tokenMap[claimName].(string); !ok || idVal != *expected {
+			t.Fatalf("%s: ID token %s mismatch", description, claimName)
+		}
 	}
 }
 

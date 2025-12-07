@@ -80,7 +80,14 @@ func Load() (*ServiceConfig, error) {
 	return cfg, nil
 }
 
-func (cfg *ServiceConfig) validate() error { //nolint:cyclop
+func (cfg *ServiceConfig) validate() error {
+	if err := cfg.validateURLs(); err != nil {
+		return err
+	}
+	return cfg.validateSettings()
+}
+
+func (cfg *ServiceConfig) validateURLs() error {
 	if err := cfg.requireSecureURL(cfg.HydraAdminURL, "OIDC_HYDRA_ADMIN_URL"); err != nil {
 		return err
 	}
@@ -110,6 +117,10 @@ func (cfg *ServiceConfig) validate() error { //nolint:cyclop
 			return err
 		}
 	}
+	return nil
+}
+
+func (cfg *ServiceConfig) validateSettings() error {
 	if cfg.RetryAfterSeconds < 0 {
 		return fmt.Errorf("OIDC_MAINTENANCE_RETRY must be >= 0")
 	}

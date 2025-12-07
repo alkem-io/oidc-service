@@ -60,14 +60,13 @@ func TestResolveSuccess(t *testing.T) {
 	if mapping.AgentID != validAgentID {
 		t.Fatalf("unexpected agent id %s", mapping.AgentID)
 	}
-
 }
 
 func TestResolveNotFound(t *testing.T) {
 	t.Parallel()
 
 	attempts := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		attempts++
 		w.WriteHeader(http.StatusNotFound)
 	}))
@@ -82,7 +81,7 @@ func TestResolveNotFound(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error")
 	}
-	if err != ErrNotFound {
+	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
 	if attempts != 1 {
@@ -94,7 +93,7 @@ func TestResolveRetriesOnServerError(t *testing.T) {
 	t.Parallel()
 
 	attempts := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		attempts++
 		if attempts < 3 {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -128,7 +127,7 @@ func TestResolveRetriesOnServerError(t *testing.T) {
 func TestResolveFailsAfterExhaustingRetries(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
 	defer server.Close()
@@ -147,7 +146,7 @@ func TestResolveFailsAfterExhaustingRetries(t *testing.T) {
 func TestResolveHonorsContextCancellation(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(50 * time.Millisecond)
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -176,7 +175,7 @@ func TestNewIdentityResolverRequiresBaseURL(t *testing.T) {
 func TestResolveTimesOut(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		time.Sleep(100 * time.Millisecond)
 	}))
 	defer server.Close()
@@ -198,7 +197,6 @@ func TestResolveTimesOut(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("expected context deadline exceeded, got %v", err)
 	}
-
 }
 
 func TestResolveRejectsInvalidAuthenticationID(t *testing.T) {
@@ -223,7 +221,7 @@ func TestResolveRejectsInvalidAuthenticationID(t *testing.T) {
 func TestResolveFailsWhenResponseUserIDIsNotUUID(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set(headerContentType, contentTypeJSON)
 		_ = json.NewEncoder(w).Encode(map[string]string{"userId": invalidUUIDText, "agentId": validAgentID})
 	}))
@@ -251,7 +249,7 @@ func TestResolveFailsWhenResponseUserIDIsNotUUID(t *testing.T) {
 func TestResolveFailsWhenResponseAgentIDIsInvalid(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set(headerContentType, contentTypeJSON)
 		_ = json.NewEncoder(w).Encode(map[string]string{"userId": validUserID, "agentId": invalidUUIDText})
 	}))
@@ -279,7 +277,7 @@ func TestResolveFailsWhenResponseAgentIDIsInvalid(t *testing.T) {
 func TestResolveFailsWhenAgentIDMissing(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set(headerContentType, contentTypeJSON)
 		_ = json.NewEncoder(w).Encode(map[string]string{"userId": validUserID})
 	}))

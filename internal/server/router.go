@@ -55,7 +55,7 @@ func NewRouter(opts Options) http.Handler {
 	)
 
 	r.Get(
-		"/health/live", func(w http.ResponseWriter, r *http.Request) {
+		"/health/live", func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(w, http.StatusOK, map[string]any{"status": "alive"})
 		},
 	)

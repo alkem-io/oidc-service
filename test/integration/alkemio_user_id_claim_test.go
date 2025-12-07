@@ -61,9 +61,9 @@ func TestConsentEndpointAddsAlkemioUserIDClaim(t *testing.T) {
 			if challengeID != challengeConsentID {
 				t.Fatalf("unexpected challenge id: %s", challengeID)
 			}
-			return consent, &http.Response{StatusCode: http.StatusOK}, nil
+			return consent, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 		},
-		AcceptConsentFunc: func(_ context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
+		AcceptConsentFunc: func(_ context.Context, _ string, body *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
 			session := body.GetSession()
 			if claims, ok := session.GetAccessToken().(map[string]any); ok {
 				capturedAccess = claims
@@ -71,7 +71,7 @@ func TestConsentEndpointAddsAlkemioUserIDClaim(t *testing.T) {
 			if claims, ok := session.GetIdToken().(map[string]any); ok {
 				capturedID = claims
 			}
-			return hydraAdmin.NewOAuth2RedirectTo("https://app.example/callback"), &http.Response{StatusCode: http.StatusOK}, nil
+			return hydraAdmin.NewOAuth2RedirectTo("https://app.example/callback"), &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 		},
 	}
 
@@ -86,7 +86,7 @@ func TestConsentEndpointAddsAlkemioUserIDClaim(t *testing.T) {
 	}
 
 	resolverStub := testsupport.AlkemioResolverStub{
-		ResolveFunc: func(_ context.Context, authenticationID string) (*alkemio.IdentityMapping, error) {
+		ResolveFunc: func(_ context.Context, _ string) (*alkemio.IdentityMapping, error) {
 			return testsupport.NewAlkemioMapping(testResolverFixture.UserID, testResolverFixture.AgentID), nil
 		},
 	}
@@ -133,10 +133,10 @@ func TestConsentEndpointFailsWhenIdentityMissing(t *testing.T) {
 	consent.SetSubject(testResolverFixture.AuthenticationID)
 
 	hydraStub := &testsupport.HydraClientStub{
-		GetConsentFunc: func(_ context.Context, challengeID string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
-			return consent, &http.Response{StatusCode: http.StatusOK}, nil
+		GetConsentFunc: func(_ context.Context, _ string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
+			return consent, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 		},
-		AcceptConsentFunc: func(_ context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
+		AcceptConsentFunc: func(_ context.Context, _ string, _ *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
 			t.Fatal("accept consent should not be invoked on failure")
 			return nil, nil, nil
 		},
@@ -153,7 +153,7 @@ func TestConsentEndpointFailsWhenIdentityMissing(t *testing.T) {
 	}
 
 	resolverStub := testsupport.AlkemioResolverStub{
-		ResolveFunc: func(_ context.Context, authenticationID string) (*alkemio.IdentityMapping, error) {
+		ResolveFunc: func(_ context.Context, _ string) (*alkemio.IdentityMapping, error) {
 			return nil, alkemio.ErrNotFound
 		},
 	}
@@ -193,8 +193,8 @@ func TestConsentEndpointFailsOnResolverError(t *testing.T) {
 	consent.SetContext(map[string]any{"identity_id": testResolverFixture.AuthenticationID})
 
 	hydraStub := &testsupport.HydraClientStub{
-		GetConsentFunc: func(_ context.Context, challengeID string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
-			return consent, &http.Response{StatusCode: http.StatusOK}, nil
+		GetConsentFunc: func(_ context.Context, _ string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
+			return consent, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 		},
 		AcceptConsentFunc: func(context.Context, string, *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
 			t.Fatal("accept consent should not be called on resolver error")
@@ -253,8 +253,8 @@ func TestConsentEndpointFailsWhenAgentIDInvalid(t *testing.T) {
 	consent.SetContext(map[string]any{"identity_id": testResolverFixture.AuthenticationID})
 
 	hydraStub := &testsupport.HydraClientStub{
-		GetConsentFunc: func(_ context.Context, challengeID string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
-			return consent, &http.Response{StatusCode: http.StatusOK}, nil
+		GetConsentFunc: func(_ context.Context, _ string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
+			return consent, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 		},
 		AcceptConsentFunc: func(context.Context, string, *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
 			t.Fatal("accept consent should not be called when mapping invalid")
@@ -269,7 +269,7 @@ func TestConsentEndpointFailsWhenAgentIDInvalid(t *testing.T) {
 	}
 
 	resolverStub := testsupport.AlkemioResolverStub{
-		ResolveFunc: func(_ context.Context, authenticationID string) (*alkemio.IdentityMapping, error) {
+		ResolveFunc: func(_ context.Context, _ string) (*alkemio.IdentityMapping, error) {
 			return testsupport.NewAlkemioMapping(testResolverFixture.UserID, "not-a-uuid"), nil
 		},
 	}
@@ -308,8 +308,8 @@ func TestConsentEndpointLogsResolverTimeout(t *testing.T) {
 	consent.SetContext(map[string]any{"identity_id": testResolverFixture.AuthenticationID})
 
 	hydraStub := &testsupport.HydraClientStub{
-		GetConsentFunc: func(_ context.Context, challengeID string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
-			return consent, &http.Response{StatusCode: http.StatusOK}, nil
+		GetConsentFunc: func(_ context.Context, _ string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
+			return consent, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 		},
 		AcceptConsentFunc: func(context.Context, string, *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
 			t.Fatal("accept consent should not be called on timeout")
@@ -325,7 +325,7 @@ func TestConsentEndpointLogsResolverTimeout(t *testing.T) {
 
 	logger := &testsupport.LoggerStub{}
 	resolverStub := testsupport.AlkemioResolverStub{
-		ResolveFunc: func(_ context.Context, authenticationID string) (*alkemio.IdentityMapping, error) {
+		ResolveFunc: func(_ context.Context, _ string) (*alkemio.IdentityMapping, error) {
 			return nil, context.DeadlineExceeded
 		},
 	}

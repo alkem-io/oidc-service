@@ -22,7 +22,7 @@ spec:
         - name: oidc-service-registry
       containers:
         - name: oidc-service
-          image: registry.example.com/alkemio-oidc-service:latest
+          image: rg.nl-ams.scw.cloud/alkemio/alkemio-oidc-service:latest
           imagePullPolicy: Always
           ports:
             - name: http

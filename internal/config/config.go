@@ -225,15 +225,16 @@ func normalizeResolvePath(raw string) string {
 }
 
 // DatabaseDSN returns the PostgreSQL connection string for pgx.
+// Credentials are URL-encoded to handle special characters safely.
 func (cfg *ServiceConfig) DatabaseDSN() string {
-	return fmt.Sprintf(
-		"postgres://%s:%s@%s:%d/%s?sslmode=disable",
-		cfg.DatabaseUsername,
-		cfg.DatabasePassword,
-		cfg.DatabaseHost,
-		cfg.DatabasePort,
-		cfg.DatabaseName,
-	)
+	u := &url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(cfg.DatabaseUsername, cfg.DatabasePassword),
+		Host:     fmt.Sprintf("%s:%d", cfg.DatabaseHost, cfg.DatabasePort),
+		Path:     cfg.DatabaseName,
+		RawQuery: "sslmode=disable",
+	}
+	return u.String()
 }
 
 // Maintenance returns the current maintenance state derived from configuration.

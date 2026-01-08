@@ -15,15 +15,15 @@ type Resolver interface {
 
 // CompositeResolver tries the database first, falling back to the API resolver.
 type CompositeResolver struct {
-	db     *DatabaseResolver
-	api    *IdentityResolver
+	db     Resolver
+	api    Resolver
 	logger *zap.Logger
 }
 
 // CompositeConfig holds the dependencies for creating a CompositeResolver.
 type CompositeConfig struct {
-	Database *DatabaseResolver
-	API      *IdentityResolver
+	Database Resolver
+	API      Resolver
 	Logger   *zap.Logger
 }
 

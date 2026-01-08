@@ -78,7 +78,13 @@ func (a *App) Run() error {
 
 	a.logger.Info("starting oidc service", zap.String("addr", defaultAddr))
 
-	if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	err := a.server.ListenAndServe()
+
+	// Clean up signal subscription and unblock handleShutdown goroutine
+	signal.Stop(shutdownCh)
+	close(shutdownCh)
+
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("http server: %w", err)
 	}
 
@@ -106,7 +112,11 @@ func (a *App) Close() error {
 }
 
 func (a *App) handleShutdown(shutdownCh <-chan os.Signal) {
-	sig := <-shutdownCh
+	sig, ok := <-shutdownCh
+	if !ok {
+		// Channel was closed, server already stopped
+		return
+	}
 	a.logger.Info("received shutdown signal", zap.String("signal", sig.String()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownGracePeriod)
@@ -180,6 +190,9 @@ func newIdentityResolver(cfg *config.ServiceConfig, logger *zap.Logger) (*alkemi
 		Logger:   logger,
 	})
 	if err != nil {
+		if dbPool != nil {
+			_ = dbPool.Close()
+		}
 		return nil, nil, fmt.Errorf("configure composite identity resolver: %w", err)
 	}
 
@@ -197,7 +210,7 @@ func (p *poolCloser) Close() error {
 	return nil
 }
 
-func newDatabaseResolver(cfg *config.ServiceConfig, _ *zap.Logger) (io.Closer, *alkemio.DatabaseResolver, error) {
+func newDatabaseResolver(cfg *config.ServiceConfig, logger *zap.Logger) (io.Closer, *alkemio.DatabaseResolver, error) {
 	dbPool, err := alkemio.NewDatabasePool(context.Background(), alkemio.DatabaseConfig{
 		DSN:     cfg.DatabaseDSN(),
 		Timeout: cfg.DatabaseTimeout,
@@ -206,7 +219,7 @@ func newDatabaseResolver(cfg *config.ServiceConfig, _ *zap.Logger) (io.Closer, *
 		return nil, nil, err
 	}
 
-	return &poolCloser{pool: dbPool}, alkemio.NewDatabaseResolver(dbPool), nil
+	return &poolCloser{pool: dbPool}, alkemio.NewDatabaseResolver(dbPool, logger), nil
 }
 
 func newChallengeService(

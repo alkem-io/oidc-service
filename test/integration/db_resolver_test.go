@@ -12,14 +12,14 @@ import (
 	"github.com/alkem-io/oidc-service/internal/alkemio"
 )
 
-// mockAPIResolver implements alkemio.Resolver for testing the API fallback path.
-type mockAPIResolver struct {
+// mockResolver implements alkemio.Resolver for testing.
+type mockResolver struct {
 	mapping *alkemio.IdentityMapping
 	err     error
 	called  bool
 }
 
-func (m *mockAPIResolver) Resolve(_ context.Context, _ string) (*alkemio.IdentityMapping, error) {
+func (m *mockResolver) Resolve(_ context.Context, _ string) (*alkemio.IdentityMapping, error) {
 	m.called = true
 	if m.err != nil {
 		return nil, m.err
@@ -49,40 +49,50 @@ func TestCompositeResolver_DBMiss(t *testing.T) {
 		AgentID: uuid.New().String(),
 	}
 
-	_ = &mockAPIResolver{mapping: apiMapping} // For documentation
-
-	// Create API-only resolver (simulates DB miss by having nil DB)
-	apiResolver, err := alkemio.NewIdentityResolver(alkemio.Config{
-		BaseURL: "https://example.com",
-	})
-	if err != nil {
-		t.Fatalf("failed to create API resolver: %v", err)
-	}
-
-	// We can't easily test the full composite without a mock DB,
-	// but we can verify the CompositeResolver falls back correctly
-	// by testing with a nil database resolver.
+	mockDB := &mockResolver{err: alkemio.ErrDBNotFound}
+	mockAPI := &mockResolver{mapping: apiMapping}
 
 	core, logs := observer.New(zap.DebugLevel)
 	logger := zap.New(core)
 
 	composite, err := alkemio.NewCompositeResolver(alkemio.CompositeConfig{
-		Database: nil, // No DB resolver - simulates DB unavailable
-		API:      apiResolver,
+		Database: mockDB,
+		API:      mockAPI,
 		Logger:   logger,
 	})
 	if err != nil {
 		t.Fatalf("failed to create composite resolver: %v", err)
 	}
 
-	// The composite should work even without a DB resolver
-	if composite == nil {
-		t.Fatal("composite resolver should not be nil")
+	ctx := context.Background()
+	testAuthID := uuid.New().String()
+
+	result, err := composite.Resolve(ctx, testAuthID)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
 	}
 
-	// Verify no warnings logged when DB is nil (expected behavior)
-	if logs.Len() > 0 {
-		t.Errorf("unexpected log entries: %v", logs.All())
+	if result == nil {
+		t.Fatal("expected result, got nil")
+	}
+
+	if result.UserID != apiMapping.UserID || result.AgentID != apiMapping.AgentID {
+		t.Errorf("expected mapping %+v, got %+v", apiMapping, result)
+	}
+
+	if !mockDB.called {
+		t.Error("expected database resolver to be called")
+	}
+
+	if !mockAPI.called {
+		t.Error("expected API resolver to be called as fallback")
+	}
+
+	// Verify no warnings logged for ErrDBNotFound (only debug)
+	for _, entry := range logs.All() {
+		if entry.Level == zap.WarnLevel {
+			t.Errorf("unexpected warning log: %v", entry.Message)
+		}
 	}
 }
 
@@ -94,37 +104,57 @@ func TestCompositeResolver_DBError(t *testing.T) {
 		AgentID: uuid.New().String(),
 	}
 
-	mockAPI := &mockAPIResolver{mapping: apiMapping}
-	_ = mockAPI // Used for documentation; actual test below
+	dbError := errors.New("database connection failed")
+	mockDB := &mockResolver{err: dbError}
+	mockAPI := &mockResolver{mapping: apiMapping}
 
-	// Test that CompositeResolver can be created without DB
 	core, logs := observer.New(zap.DebugLevel)
 	logger := zap.New(core)
 
-	apiResolver, err := alkemio.NewIdentityResolver(alkemio.Config{
-		BaseURL: "https://example.com",
-	})
-	if err != nil {
-		t.Fatalf("failed to create API resolver: %v", err)
-	}
-
 	composite, err := alkemio.NewCompositeResolver(alkemio.CompositeConfig{
-		Database: nil,
-		API:      apiResolver,
+		Database: mockDB,
+		API:      mockAPI,
 		Logger:   logger,
 	})
 	if err != nil {
 		t.Fatalf("failed to create composite resolver: %v", err)
 	}
 
-	// Verify composite resolver was created successfully
-	if composite == nil {
-		t.Fatal("composite resolver should not be nil")
+	ctx := context.Background()
+	testAuthID := uuid.New().String()
+
+	result, err := composite.Resolve(ctx, testAuthID)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
 	}
 
-	// The actual DB error path logging is tested when we have a mock DB
-	// that returns errors. For now, verify the structure is correct.
-	_ = logs // Logs would be checked if we could inject a failing mock DB
+	if result == nil {
+		t.Fatal("expected result, got nil")
+	}
+
+	if result.UserID != apiMapping.UserID || result.AgentID != apiMapping.AgentID {
+		t.Errorf("expected mapping %+v, got %+v", apiMapping, result)
+	}
+
+	if !mockDB.called {
+		t.Error("expected database resolver to be called")
+	}
+
+	if !mockAPI.called {
+		t.Error("expected API resolver to be called as fallback")
+	}
+
+	// Verify a warning was logged for the database error
+	var foundWarning bool
+	for _, entry := range logs.All() {
+		if entry.Level == zap.WarnLevel && entry.Message == "database lookup failed, falling back to API" {
+			foundWarning = true
+			break
+		}
+	}
+	if !foundWarning {
+		t.Error("expected warning log about database lookup failure")
+	}
 }
 
 // TestDatabaseResolver_InvalidUUID verifies UUID validation in DatabaseResolver.
@@ -146,7 +176,8 @@ func TestCompositeResolver_RequiresAPIResolver(t *testing.T) {
 		t.Fatal("expected error when API resolver is nil")
 	}
 
-	if !errors.Is(err, nil) && err.Error() != "API resolver is required" {
-		t.Errorf("unexpected error message: %v", err)
+	expectedMsg := "API resolver is required"
+	if err.Error() != expectedMsg {
+		t.Errorf("expected error message %q, got %q", expectedMsg, err.Error())
 	}
 }

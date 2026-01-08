@@ -146,6 +146,12 @@ func (cfg *ServiceConfig) validateSettings() error {
 	if cfg.IdentityMaxRetries <= 0 {
 		return fmt.Errorf("OIDC_ALKEMIO_IDENTITY_RETRIES must be > 0")
 	}
+	if cfg.DatabaseTimeout < 0 {
+		return fmt.Errorf("OIDC_DATABASE_TIMEOUT must be >= 0")
+	}
+	if cfg.DatabasePort <= 0 || cfg.DatabasePort > 65535 {
+		return fmt.Errorf("OIDC_DATABASE_PORT must be between 1 and 65535")
+	}
 
 	return nil
 }

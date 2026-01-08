@@ -10,9 +10,10 @@ GOBUILD=$(GO) build
 GOCLEAN=$(GO) clean
 GOVET=$(GO) vet
 GOFMT=$(GO) fmt
+SQLC?=sqlc
 
 
-.PHONY: build build-service build-docstringcov test lint docstring-coverage
+.PHONY: build build-service build-docstringcov test lint fmt generate sqlc docstring-coverage
 
 # Build all binaries.
 build: build-service build-docstringcov
@@ -48,6 +49,19 @@ lint:
 fmt:
 	@echo "Formatting..."
 	$(GOFMT) ./...
+
+# Generate SQLC code from SQL queries.
+sqlc:
+	@echo "Generating SQLC code..."
+	@if command -v $(SQLC) >/dev/null; then \
+		$(SQLC) generate; \
+	else \
+		echo "sqlc not found. Install with: go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest"; \
+		exit 1; \
+	fi
+
+# Run all code generation (currently just SQLC).
+generate: sqlc
 
 # Run the docstring coverage CLI and write docs/coverage.json.
 docstring-coverage: build-docstringcov

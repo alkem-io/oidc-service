@@ -41,6 +41,14 @@ cp configs/env.sample .env.oidc
 #
 #   # Override return base (defaults to ${OIDC_WEB_BASE_URL}/oidc/login)
 #   # OIDC_LOGIN_RETURN_BASE_URL=http://localhost:3000/oidc/login
+#
+# Database (optional, enables fast DB-first identity resolution):
+#   DATABASE_HOST=localhost
+#   DATABASE_PORT=5432
+#   DATABASE_USERNAME=synapse
+#   DATABASE_PASSWORD=synapse
+#   DATABASE_NAME=alkemio
+#   # DATABASE_TIMEOUT=5s
 ```
 
 ## 3. Launch supporting services

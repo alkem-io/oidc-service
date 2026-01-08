@@ -1,0 +1,13 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries: "internal/alkemio/queries/queries.sql"
+    schema: "internal/alkemio/queries/schema.sql"
+    gen:
+      go:
+        package: "queries"
+        out: "internal/alkemio/queries"
+        sql_package: "pgx/v5"
+        emit_json_tags: false
+        emit_interface: false
+        emit_empty_slices: true

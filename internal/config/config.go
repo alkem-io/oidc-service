@@ -29,6 +29,14 @@ type ServiceConfig struct {
 	AllowInsecureHTTP   bool          `envconfig:"ALLOW_INSECURE_HTTP" default:"false"`
 	ReadinessTimeout    time.Duration `envconfig:"READINESS_TIMEOUT" default:"5s"`
 	LogLevel            string        `envconfig:"LOG_LEVEL" default:"info"`
+
+	// Database configuration for identity resolution cache
+	DatabaseHost     string        `envconfig:"DATABASE_HOST" default:"localhost"`
+	DatabasePort     int           `envconfig:"DATABASE_PORT" default:"5432"`
+	DatabaseUsername string        `envconfig:"DATABASE_USERNAME" default:"synapse"`
+	DatabasePassword string        `envconfig:"DATABASE_PASSWORD" default:"synapse"`
+	DatabaseName     string        `envconfig:"DATABASE_NAME" default:"alkemio"`
+	DatabaseTimeout  time.Duration `envconfig:"DATABASE_TIMEOUT" default:"5s"`
 }
 
 // MaintenanceState exposes the cached maintenance toggle information.
@@ -214,6 +222,18 @@ func normalizeResolvePath(raw string) string {
 		return "/"
 	}
 	return "/" + trimmed
+}
+
+// DatabaseDSN returns the PostgreSQL connection string for pgx.
+func (cfg *ServiceConfig) DatabaseDSN() string {
+	return fmt.Sprintf(
+		"postgres://%s:%s@%s:%d/%s?sslmode=disable",
+		cfg.DatabaseUsername,
+		cfg.DatabasePassword,
+		cfg.DatabaseHost,
+		cfg.DatabasePort,
+		cfg.DatabaseName,
+	)
 }
 
 // Maintenance returns the current maintenance state derived from configuration.

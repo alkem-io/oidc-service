@@ -40,7 +40,39 @@ Optional:
   forwarded headers from your reverse proxy.
 - `OIDC_LOGIN_RETURN_BASE_URL` to override the default `${OIDC_WEB_BASE_URL}/oidc/login`.
 
+Database (optional, for fast identity resolution):
+
+- `DATABASE_HOST` (default: `localhost`)
+- `DATABASE_PORT` (default: `5432`)
+- `DATABASE_USERNAME` (default: `synapse`)
+- `DATABASE_PASSWORD` (default: `synapse`)
+- `DATABASE_NAME` (default: `alkemio`)
+- `DATABASE_TIMEOUT` (default: `5s`)
+
+When database is configured, the service queries the Alkemio database directly
+for identity mappings (UserID, AgentID) before falling back to the HTTP API.
+This reduces latency and load on the Alkemio server. If the database is
+unavailable, the service gracefully falls back to API-only mode.
+
 See `configs/env.sample` for a documented template.
+
+## Development
+
+Build and test:
+
+```sh
+make build      # Build all binaries
+make test       # Run test suite
+make lint       # Run linters
+make fmt        # Format code
+```
+
+Code generation (after modifying SQL queries):
+
+```sh
+make sqlc       # Generate type-safe Go code from SQL
+make generate   # Run all code generators
+```
 
 ## Docstring Coverage
 

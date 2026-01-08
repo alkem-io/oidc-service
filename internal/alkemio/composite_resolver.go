@@ -70,7 +70,7 @@ func (r *CompositeResolver) Resolve(ctx context.Context, authenticationID string
 }
 
 func maskUUID(id string) string {
-	if len(id) < 8 {
+	if len(id) <= 8 {
 		return "***"
 	}
 	return id[:8] + "..."

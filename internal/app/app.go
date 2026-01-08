@@ -92,16 +92,19 @@ func (a *App) Run() error {
 }
 
 // Close performs graceful shutdown of all resources.
+// Resources are closed in reverse order (like defer semantics).
 func (a *App) Close() error {
 	var errs []error
 
-	for _, closer := range a.closers {
-		if err := closer.Close(); err != nil {
+	// Close resources in reverse order for proper teardown
+	for i := len(a.closers) - 1; i >= 0; i-- {
+		if err := a.closers[i].Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}
 
-	if err := a.logger.Sync(); err != nil {
+	// Sync logger, ignoring spurious errors from stdout/stderr
+	if err := a.logger.Sync(); err != nil && !isSyncIgnorable(err) {
 		errs = append(errs, err)
 	}
 
@@ -109,6 +112,13 @@ func (a *App) Close() error {
 		return fmt.Errorf("close errors: %v", errs)
 	}
 	return nil
+}
+
+// isSyncIgnorable returns true for errors that commonly occur when syncing
+// zap loggers to stdout/stderr (e.g., on Linux terminals).
+func isSyncIgnorable(err error) bool {
+	// EINVAL and ENOTTY occur when syncing to terminals
+	return errors.Is(err, syscall.EINVAL) || errors.Is(err, syscall.ENOTTY)
 }
 
 func (a *App) handleShutdown(shutdownCh <-chan os.Signal) {
@@ -214,7 +224,7 @@ func newDatabaseResolver(cfg *config.ServiceConfig, logger *zap.Logger) (io.Clos
 	dbPool, err := alkemio.NewDatabasePool(context.Background(), alkemio.DatabaseConfig{
 		DSN:     cfg.DatabaseDSN(),
 		Timeout: cfg.DatabaseTimeout,
-	})
+	}, logger)
 	if err != nil {
 		return nil, nil, err
 	}

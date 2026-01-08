@@ -57,6 +57,73 @@ optional `Retry-After` header derived from `OIDC_MAINTENANCE_RETRY`.
 4. **Disable maintenance** by removing or setting the toggle to `false` and
    redeploying.
 
+## Identity Resolution Architecture
+
+The service uses a composite resolver pattern for looking up Alkemio identity mappings (UserID, AgentID) from authentication IDs:
+
+```
+Request → CompositeResolver
+              ├─ DatabaseResolver (try first)
+              │     └─ SQLC queries → pgxpool → PostgreSQL
+              │
+              └─ IdentityResolver (fallback on miss/error)
+                    └─ HTTP API → Alkemio Server
+```
+
+### Resolution Flow
+
+1. **Database Hit**: Query returns valid UserID and AgentID → use immediately, skip API
+2. **Database Miss**: No rows found → fall back to HTTP API (debug log)
+3. **Database Error**: Connection failure, timeout, or query error → fall back to HTTP API (warning log)
+4. **API Fallback**: HTTP API resolver handles the request as before
+
+### Configuration
+
+Database connection is configured via environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DATABASE_HOST` | `localhost` | PostgreSQL host |
+| `DATABASE_PORT` | `5432` | PostgreSQL port |
+| `DATABASE_NAME` | `alkemio` | Database name |
+| `DATABASE_USERNAME` | `synapse` | Database user |
+| `DATABASE_PASSWORD` | `synapse` | Database password |
+| `DATABASE_TIMEOUT` | `5s` | Connection timeout |
+
+If database connection fails at startup, the service logs a warning and operates in API-only mode.
+
+### Observability
+
+Monitor identity resolution via structured logs:
+
+```bash
+# Database hits (debug level)
+grep "resolved from database" /var/log/oidc-service.log
+
+# Database misses triggering API fallback
+grep "identity not found in database" /var/log/oidc-service.log
+
+# Database errors triggering API fallback (warning level)
+grep "database lookup failed" /var/log/oidc-service.log
+```
+
+### Troubleshooting
+
+1. **Database Connection Issues**:
+   - Check `DATABASE_*` environment variables
+   - Verify network connectivity to PostgreSQL
+   - Review startup logs for connection errors
+
+2. **High API Fallback Rate**:
+   - New users not yet in database → expected behavior
+   - Database connectivity issues → check warning logs
+   - Verify `user` table has `authenticationID`, `id`, `agentId` columns
+
+3. **Performance**:
+   - Database queries use connection pooling (pgxpool)
+   - Typical DB lookup: <5ms vs API: 50-200ms
+   - Monitor for connection pool exhaustion in high-load scenarios
+
 ## Token Claims Observability
 
 The service enhances OIDC tokens with user profile and compliance claims. Rely on structured logs (no Prometheus metrics) to monitor these behaviours:
@@ -86,7 +153,7 @@ The service enhances OIDC tokens with user profile and compliance claims. Rely o
    - **Compliance**: Critical for legal compliance - monitor omission rates
 
 4. **Agent Identity** (`agent_id`):
-   - **Source**: Alkemio resolver `/rest/internal/identity/resolve` response (`agentId` field)
+   - **Source**: Database query (primary) or Alkemio API `/rest/internal/identity/resolve` (fallback)
    - **Tokens**: Both ID tokens and access tokens
    - **Validation**: Must be a canonical UUID; missing/invalid values block consent/login resolution with `alkemio_resolution_failed`
    - **Observability**: Success paths log `resolved alkemio identity mapping` with masked IDs; failures emit `failed to resolve alkemio identity mapping` or `received invalid alkemio identity mapping` entries

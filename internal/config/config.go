@@ -29,6 +29,14 @@ type ServiceConfig struct {
 	AllowInsecureHTTP   bool          `envconfig:"ALLOW_INSECURE_HTTP" default:"false"`
 	ReadinessTimeout    time.Duration `envconfig:"READINESS_TIMEOUT" default:"5s"`
 	LogLevel            string        `envconfig:"LOG_LEVEL" default:"info"`
+
+	// Database configuration for identity resolution cache
+	DatabaseHost     string        `envconfig:"DATABASE_HOST" default:"localhost"`
+	DatabasePort     int           `envconfig:"DATABASE_PORT" default:"5432"`
+	DatabaseUsername string        `envconfig:"DATABASE_USERNAME" default:"synapse"`
+	DatabasePassword string        `envconfig:"DATABASE_PASSWORD" default:"synapse"`
+	DatabaseName     string        `envconfig:"DATABASE_NAME" default:"alkemio"`
+	DatabaseTimeout  time.Duration `envconfig:"DATABASE_TIMEOUT" default:"5s"`
 }
 
 // MaintenanceState exposes the cached maintenance toggle information.
@@ -138,6 +146,12 @@ func (cfg *ServiceConfig) validateSettings() error {
 	if cfg.IdentityMaxRetries <= 0 {
 		return fmt.Errorf("OIDC_ALKEMIO_IDENTITY_RETRIES must be > 0")
 	}
+	if cfg.DatabaseTimeout < 0 {
+		return fmt.Errorf("OIDC_DATABASE_TIMEOUT must be >= 0")
+	}
+	if cfg.DatabasePort <= 0 || cfg.DatabasePort > 65535 {
+		return fmt.Errorf("OIDC_DATABASE_PORT must be between 1 and 65535")
+	}
 
 	return nil
 }
@@ -214,6 +228,19 @@ func normalizeResolvePath(raw string) string {
 		return "/"
 	}
 	return "/" + trimmed
+}
+
+// DatabaseDSN returns the PostgreSQL connection string for pgx.
+// Credentials are URL-encoded to handle special characters safely.
+func (cfg *ServiceConfig) DatabaseDSN() string {
+	u := &url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(cfg.DatabaseUsername, cfg.DatabasePassword),
+		Host:     fmt.Sprintf("%s:%d", cfg.DatabaseHost, cfg.DatabasePort),
+		Path:     cfg.DatabaseName,
+		RawQuery: "sslmode=disable",
+	}
+	return u.String()
 }
 
 // Maintenance returns the current maintenance state derived from configuration.

@@ -87,9 +87,9 @@ func TestConsentAddsAlkemioUserIDClaim(t *testing.T) {
 
 	require.NotNil(t, capturedAccess, "access token claims not captured")
 	require.NotNil(t, capturedID, "id token claims not captured")
-	requireStringClaim(t, capturedAccess, "alkemio_user_id", contractUserID)
+	requireStringClaim(t, capturedAccess, "alkemio_actor_id", contractUserID)
 	requireStringClaim(t, capturedAccess, "agent_id", contractAgentID)
-	requireStringClaim(t, capturedID, "alkemio_user_id", contractUserID)
+	requireStringClaim(t, capturedID, "alkemio_actor_id", contractUserID)
 	requireStringClaim(t, capturedID, "agent_id", contractAgentID)
 }
 

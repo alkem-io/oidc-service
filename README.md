@@ -5,7 +5,71 @@ Standalone Go 1.25 service that resolves Hydra login and consent challenges, fet
 ## Endpoints
 
 - Public: `/oidc/login`, `/oidc/consent`
+- Webhooks: `/webhooks/kratos/post-login`, `/webhooks/kratos/post-registration`
 - Health: `/health/ready`, `/health/live`
+
+### Kratos Webhooks for Alkemio Claims
+
+Two webhook endpoints resolve Alkemio identity claims (`alkemio_actor_id`, `alkemio_agent_id`) and store them in `identity.metadata_public`:
+
+- **`/webhooks/kratos/post-registration`** - Returns claims in response; Kratos parses and stores them
+- **`/webhooks/kratos/post-login`** - Calls Kratos Admin API to patch identity metadata
+
+**Jsonnet payload** (`configs/kratos/alkemio-claims.jsonnet`):
+
+```jsonnet
+function(ctx) {
+  identity_id: ctx.identity.id
+}
+```
+
+**Kratos configuration** (`kratos.yml`):
+
+Alkemio creates the user record after email verification, so webhooks are configured for:
+- **Post-verification**: Resolves claims when user completes email verification
+- **Post-login**: Refreshes claims on each login
+
+```yaml
+selfservice:
+  flows:
+    verification:
+      after:
+        hooks:
+          - hook: web_hook
+            config:
+              url: http://oidc-service:8080/webhooks/kratos/post-login
+              method: POST
+              body: file:///etc/config/kratos/alkemio-claims.jsonnet
+              response:
+                ignore: false
+                parse: false   # We update via Admin API
+
+    login:
+      after:
+        # Hooks must be configured per login method
+        password:
+          hooks:
+            - hook: web_hook
+              config:
+                url: http://oidc-service:8080/webhooks/kratos/post-login
+                method: POST
+                body: file:///etc/config/kratos/alkemio-claims.jsonnet
+                response:
+                  ignore: false
+                  parse: false   # We update via Admin API
+        oidc:
+          hooks:
+            - hook: web_hook
+              config:
+                url: http://oidc-service:8080/webhooks/kratos/post-login
+                method: POST
+                body: file:///etc/config/kratos/alkemio-claims.jsonnet
+                response:
+                  ignore: false
+                  parse: false
+```
+
+Resolution failures return HTTP 500 to block login/registration (sessions must have claims).
 
 On `session_required`/`session_invalid`, the service redirects browsers to the
 Kratos login flow and returns to `/oidc/login` after authentication.

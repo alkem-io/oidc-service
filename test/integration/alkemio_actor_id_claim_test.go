@@ -114,14 +114,14 @@ func TestConsentEndpointAddsAlkemioUserIDClaim(t *testing.T) {
 		t.Fatal("expected redirect location")
 	}
 
-	if capturedAccess["alkemio_user_id"] != testResolverFixture.UserID {
-		t.Fatalf("access token missing alkemio_user_id: %v", capturedAccess)
+	if capturedAccess["alkemio_actor_id"] != testResolverFixture.UserID {
+		t.Fatalf("access token missing alkemio_actor_id: %v", capturedAccess)
 	}
 	if capturedAccess["agent_id"] != testResolverFixture.AgentID {
 		t.Fatalf("access token missing agent_id: %v", capturedAccess)
 	}
-	if capturedID["alkemio_user_id"] != testResolverFixture.UserID {
-		t.Fatalf("id token missing alkemio_user_id: %v", capturedID)
+	if capturedID["alkemio_actor_id"] != testResolverFixture.UserID {
+		t.Fatalf("id token missing alkemio_actor_id: %v", capturedID)
 	}
 	if capturedID["agent_id"] != testResolverFixture.AgentID {
 		t.Fatalf("id token missing agent_id: %v", capturedID)

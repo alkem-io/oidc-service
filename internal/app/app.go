@@ -22,6 +22,7 @@ import (
 	"github.com/alkem-io/oidc-service/internal/kratos"
 	"github.com/alkem-io/oidc-service/internal/maintenance"
 	"github.com/alkem-io/oidc-service/internal/server"
+	"github.com/alkem-io/oidc-service/internal/webhook"
 	"github.com/alkem-io/oidc-service/pkg/telemetry"
 )
 
@@ -64,7 +65,7 @@ func New(cfg *config.ServiceConfig) (*App, error) {
 		return nil, err
 	}
 
-	app.server = newHTTPServer(cfg, logger, oryClients.sessionResolver, challengeSvc)
+	app.server = newHTTPServer(cfg, logger, oryClients, challengeSvc, identityResolver)
 
 	return app, nil
 }
@@ -276,19 +277,31 @@ func newChallengeService(
 func newHTTPServer(
 	cfg *config.ServiceConfig,
 	logger *zap.Logger,
-	sessionResolver *kratos.SessionResolver,
+	ory *oryClients,
 	challengeSvc challenge.Service,
+	identityResolver *alkemio.CompositeResolver,
 ) *http.Server {
 	maint := maintenance.NewState(cfg.Maintenance())
+
+	kratosAdmin := webhook.NewKratosAdminClient(ory.kratos.Admin())
+	webhookHandler, err := webhook.NewHandler(webhook.HandlerConfig{
+		Resolver: identityResolver,
+		Kratos:   kratosAdmin,
+		Logger:   logger,
+	})
+	if err != nil {
+		logger.Warn("failed to create webhook handler", zap.Error(err))
+	}
 
 	handler := server.NewRouter(server.Options{
 		Logger:             logger,
 		Maintenance:        maint,
 		Challenge:          challengeSvc,
-		SessionResolver:    sessionResolver,
+		SessionResolver:    ory.sessionResolver,
 		SessionCookie:      cfg.KratosSessionCookie,
 		KratosBrowserURL:   cfg.KratosBrowserURL,
 		LoginReturnBaseURL: cfg.LoginReturnBaseURL,
+		WebhookHandler:     webhookHandler,
 	})
 
 	return &http.Server{

@@ -15,6 +15,7 @@ import (
 	"github.com/alkem-io/oidc-service/internal/config"
 	"github.com/alkem-io/oidc-service/internal/maintenance"
 	middlewarepkg "github.com/alkem-io/oidc-service/internal/middleware"
+	"github.com/alkem-io/oidc-service/internal/webhook"
 )
 
 // Options bundles router dependencies.
@@ -26,6 +27,7 @@ type Options struct {
 	SessionCookie      string
 	KratosBrowserURL   string
 	LoginReturnBaseURL string
+	WebhookHandler     *webhook.Handler
 }
 
 // NewRouter wires core middleware and health endpoints.
@@ -119,6 +121,11 @@ func NewRouter(opts Options) http.Handler {
 				consentHandler.Handle(w, r)
 			},
 		)
+	}
+
+	if opts.WebhookHandler != nil {
+		r.Post("/webhooks/kratos/post-login", opts.WebhookHandler.PostLogin)
+		r.Post("/webhooks/kratos/post-registration", opts.WebhookHandler.PostRegistration)
 	}
 
 	return r

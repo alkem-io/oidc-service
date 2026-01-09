@@ -53,6 +53,8 @@ This document provides essential guidance for AI coding assistants working on th
 - Do not guess — guessing leads to rework; asking or searching takes less time than fixing wrong assumptions
 
 ## Active Technologies
+- Go 1.25 + chi router, zap logger, existing CompositeResolver (007-kratos-metadata-webhook)
+- N/A (uses existing Alkemio DB via CompositeResolver) (007-kratos-metadata-webhook)
 
 - **Language**: Go 1.25
 - **Database**: PostgreSQL (Alkemio database)
@@ -99,3 +101,6 @@ test/
 ## Full Constitution
 
 See `.specify/memory/constitution.md` for the complete engineering constitution (v1.6.0).
+
+## Recent Changes
+- 007-kratos-metadata-webhook: Added Go 1.25 + chi router, zap logger, existing CompositeResolver

@@ -388,14 +388,14 @@ func TestResolveConsentBuildsSessionClaims(t *testing.T) {
 	require.Equal(t, identityEmail, idTokenClaims["email"])
 	require.Equal(t, identityDisplayName, idTokenClaims["display_name"])
 	require.Equal(t, identityMatrixID, idTokenClaims["matrix_user_id"])
-	require.Equal(t, defaultAlkemioUserID, idTokenClaims["alkemio_user_id"])
+	require.Equal(t, defaultAlkemioActorID, idTokenClaims["alkemio_actor_id"])
 	require.Equal(t, defaultAlkemioAgentID, idTokenClaims["agent_id"])
 
 	accessTokenClaims, ok := capturedSession.GetAccessToken().(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, kratosIdentityID, accessTokenClaims[identityContextKey])
 	require.Equal(t, map[string]any{"role": "member"}, accessTokenClaims["traits"])
-	require.Equal(t, defaultAlkemioUserID, accessTokenClaims["alkemio_user_id"])
+	require.Equal(t, defaultAlkemioActorID, accessTokenClaims["alkemio_actor_id"])
 	require.Equal(t, defaultAlkemioAgentID, accessTokenClaims["agent_id"])
 
 	ctxMap, ok := capturedContext.(map[string]any)
@@ -425,7 +425,7 @@ func TestResolveConsentInvalidAlkemioMappingReturnsError(t *testing.T) {
 	}}
 
 	resolver := alkemioResolverStub{resolve: func(_ context.Context, _ string) (*alkemio.IdentityMapping, error) {
-		return TestAlkemioMapping(defaultAlkemioUserID, "not-a-uuid"), nil
+		return TestAlkemioMapping(defaultAlkemioActorID, "not-a-uuid"), nil
 	}}
 
 	svc, err := NewService(Options{Hydra: mock, Identity: idFetcher, Alkemio: resolver})

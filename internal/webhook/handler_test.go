@@ -82,7 +82,9 @@ func TestPostLoginSuccess(t *testing.T) {
 			require.Len(t, patches, 1)
 			require.Equal(t, "add", patches[0].Op)
 			require.Equal(t, "/metadata_public", patches[0].Path)
-			patchedValue = patches[0].Value.(map[string]interface{})
+			var ok bool
+			patchedValue, ok = patches[0].Value.(map[string]interface{})
+			require.True(t, ok, "expected patch value to be map[string]interface{}")
 			return nil
 		},
 	}
@@ -181,6 +183,42 @@ func TestPostLoginResolverErrorReturns500(t *testing.T) {
 	require.Equal(t, "resolution_failed", resp.Error)
 }
 
+func TestPostLoginNotFoundReturns404(t *testing.T) {
+	resolverStub := resolverStub{
+		resolve: func(_ context.Context, _ string) (*alkemio.IdentityMapping, error) {
+			return nil, alkemio.ErrNotFound
+		},
+	}
+
+	kratosStub := kratosAdminStub{
+		patchIdentity: func(_ context.Context, _ string, _ []kratosClient.JsonPatch) error {
+			t.Fatal("patch should not be called when identity not found")
+			return nil
+		},
+	}
+
+	handler, err := NewHandler(HandlerConfig{
+		Resolver: resolverStub,
+		Kratos:   kratosStub,
+		Logger:   zap.NewNop(),
+	})
+	require.NoError(t, err)
+
+	body := `{"identity_id":"` + testIdentityID + `"}`
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/kratos/post-login", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	handler.PostLogin(rec, req)
+
+	require.Equal(t, http.StatusNotFound, rec.Code)
+
+	var resp ErrorResponse
+	err = json.NewDecoder(rec.Body).Decode(&resp)
+	require.NoError(t, err)
+	require.Equal(t, "identity_not_found", resp.Error)
+}
+
 func TestPostLoginTimeoutReturns500(t *testing.T) {
 	resolverStub := resolverStub{
 		resolve: func(_ context.Context, _ string) (*alkemio.IdentityMapping, error) {
@@ -231,4 +269,35 @@ func TestPostLoginMalformedJSONReturns400(t *testing.T) {
 	err = json.NewDecoder(rec.Body).Decode(&resp)
 	require.NoError(t, err)
 	require.Equal(t, "bad_request", resp.Error)
+}
+
+func TestPostLoginMissingIdentityIDReturns400(t *testing.T) {
+	resolverStub := resolverStub{
+		resolve: func(_ context.Context, _ string) (*alkemio.IdentityMapping, error) {
+			t.Fatal("resolver should not be called when identity_id is missing")
+			return nil, nil
+		},
+	}
+
+	handler, err := NewHandler(HandlerConfig{
+		Resolver: resolverStub,
+		Kratos:   kratosAdminStub{},
+		Logger:   zap.NewNop(),
+	})
+	require.NoError(t, err)
+
+	body := `{}`
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/kratos/post-login", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	handler.PostLogin(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var resp ErrorResponse
+	err = json.NewDecoder(rec.Body).Decode(&resp)
+	require.NoError(t, err)
+	require.Equal(t, "bad_request", resp.Error)
+	require.Contains(t, resp.Message, "identity_id")
 }

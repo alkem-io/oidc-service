@@ -20,8 +20,8 @@
 
 ```json
 {
-  "error": "resolution_failed",
-  "message": "failed to resolve Alkemio identity"
+  "error": "identity_not_found",
+  "message": "Alkemio identity mapping not found"
 }
 ```
 
@@ -29,7 +29,8 @@
 |--------|-----------|--------|
 | 200 | Success | Identity patched via Admin API |
 | 400 | Malformed request | Login blocked |
-| 500 | Resolution failed | Login blocked |
+| 404 | Identity not found in Alkemio | Login blocked |
+| 500 | Resolution failed (DB error, timeout) | Login blocked |
 
 ## Internal Flow
 

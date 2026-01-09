@@ -68,7 +68,7 @@ selfservice:
                   parse: false
 ```
 
-Resolution failures return HTTP 500 to block login/registration (sessions must have claims).
+Resolution failures block login (sessions must have claims): HTTP 404 if identity not found, HTTP 500 for other errors.
 
 On `session_required`/`session_invalid`, the service redirects browsers to the
 Kratos login flow and returns to `/oidc/login` after authentication.

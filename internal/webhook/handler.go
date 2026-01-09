@@ -161,6 +161,14 @@ func (h *Handler) resolveIdentity(ctx context.Context, r *http.Request) (string,
 			zap.String("error_type", classifyError(err)),
 			zap.Error(err),
 		)
+		// Distinguish "not found" from other resolution errors for clearer diagnostics
+		if errors.Is(err, alkemio.ErrNotFound) {
+			return "", nil, &webhookError{
+				status:  http.StatusNotFound,
+				code:    "identity_not_found",
+				message: "Alkemio identity mapping not found",
+			}
+		}
 		return "", nil, &webhookError{
 			status:  http.StatusInternalServerError,
 			code:    "resolution_failed",

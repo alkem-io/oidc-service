@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -15,6 +16,9 @@ import (
 	"github.com/alkem-io/oidc-service/internal/alkemio"
 	"github.com/alkem-io/oidc-service/internal/middleware"
 )
+
+// maxWebhookBodySize limits request body size to prevent large payload attacks.
+const maxWebhookBodySize = 4 * 1024 // 4KB
 
 // AlkemioResolver resolves Alkemio identity mappings from authentication IDs.
 type AlkemioResolver interface {
@@ -131,7 +135,7 @@ func (h *Handler) resolveIdentity(ctx context.Context, r *http.Request) (string,
 	logger := h.loggerFromCtx(ctx)
 
 	var req Request
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(io.LimitReader(r.Body, maxWebhookBodySize)).Decode(&req); err != nil {
 		logger.Warn("failed to decode webhook request", zap.Error(err))
 		return "", nil, &webhookError{
 			status:  http.StatusBadRequest,

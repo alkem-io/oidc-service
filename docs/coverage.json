@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2025-11-21T17:12:00.429765Z",
-  "overallCoverage": 100,
-  "documentedExports": 174,
-  "totalExports": 174,
+  "generatedAt": "2026-01-08T23:46:08.910881Z",
+  "overallCoverage": 96.38,
+  "documentedExports": 213,
+  "totalExports": 221,
   "threshold": 80,
   "packages": [
     {
@@ -22,7 +22,78 @@
     {
       "path": "internal/alkemio",
       "coverage": 100,
-      "documented": 9,
+      "documented": 20,
+      "undocumented": 0,
+      "missingSymbols": []
+    },
+    {
+      "path": "internal/alkemio/queries",
+      "coverage": 0,
+      "documented": 0,
+      "undocumented": 8,
+      "missingSymbols": [
+        {
+          "symbol": "DBTX",
+          "kind": "type",
+          "file": "internal/alkemio/queries/db.go",
+          "line": 14,
+          "reason": "missing"
+        },
+        {
+          "symbol": "GetUserByAuthenticationID",
+          "kind": "method",
+          "file": "internal/alkemio/queries/queries.sql.go",
+          "line": 25,
+          "reason": "missing"
+        },
+        {
+          "symbol": "GetUserByAuthenticationIDRow",
+          "kind": "type",
+          "file": "internal/alkemio/queries/queries.sql.go",
+          "line": 20,
+          "reason": "missing"
+        },
+        {
+          "symbol": "New",
+          "kind": "func",
+          "file": "internal/alkemio/queries/db.go",
+          "line": 20,
+          "reason": "missing"
+        },
+        {
+          "symbol": "Queries",
+          "kind": "type",
+          "file": "internal/alkemio/queries/db.go",
+          "line": 24,
+          "reason": "missing"
+        },
+        {
+          "symbol": "User",
+          "kind": "type",
+          "file": "internal/alkemio/queries/models.go",
+          "line": 11,
+          "reason": "missing"
+        },
+        {
+          "symbol": "WithTx",
+          "kind": "method",
+          "file": "internal/alkemio/queries/db.go",
+          "line": 28,
+          "reason": "missing"
+        },
+        {
+          "symbol": "queries",
+          "kind": "package",
+          "file": "internal/alkemio/queries/db.go",
+          "line": 1,
+          "reason": "missing"
+        }
+      ]
+    },
+    {
+      "path": "internal/app",
+      "coverage": 100,
+      "documented": 6,
       "undocumented": 0,
       "missingSymbols": []
     },
@@ -36,7 +107,7 @@
     {
       "path": "internal/config",
       "coverage": 100,
-      "documented": 7,
+      "documented": 8,
       "undocumented": 0,
       "missingSymbols": []
     },
@@ -86,6 +157,13 @@
       "path": "internal/server",
       "coverage": 100,
       "documented": 11,
+      "undocumented": 0,
+      "missingSymbols": []
+    },
+    {
+      "path": "internal/webhook",
+      "coverage": 100,
+      "documented": 21,
       "undocumented": 0,
       "missingSymbols": []
     },

@@ -577,13 +577,13 @@ func (s *service) attachAlkemioClaim(ctx context.Context, challengeID string, pr
 		s.logger.Debug("resolved alkemio identity mapping",
 			"challenge_id", challengeID,
 			"identity_id", maskedIdentity,
-			"alkemio_user_id", maskIdentityID(validated.UserID),
+			"alkemio_actor_id", maskIdentityID(validated.UserID),
 			"agent_id", maskIdentityID(validated.AgentID),
 		)
 	}
 
 	profile.TokenClaims = ensureTokenClaims(profile.TokenClaims)
-	profile.TokenClaims.AlkemioUserID = stringPointer(validated.UserID)
+	profile.TokenClaims.AlkemioActorID = stringPointer(validated.UserID)
 	profile.TokenClaims.AlkemioAgentID = stringPointer(validated.AgentID)
 	return nil
 }
@@ -591,28 +591,28 @@ func (s *service) attachAlkemioClaim(ctx context.Context, challengeID string, pr
 const identityContextKey = "identity_id"
 
 func buildLoginContext(profile *IdentityProfile) map[string]any {
-	context := map[string]any{
+	loginCtx := map[string]any{
 		identityContextKey: profile.ID,
 		"email":            profile.Email,
 		"display_name":     profile.DisplayName,
 	}
 	if profile.MatrixUserID != "" {
-		context["matrix_user_id"] = profile.MatrixUserID
+		loginCtx["matrix_user_id"] = profile.MatrixUserID
 	}
 	if len(profile.Traits) > 0 {
-		context["traits"] = cloneTraits(profile.Traits)
+		loginCtx["traits"] = cloneTraits(profile.Traits)
 	}
-	return context
+	return loginCtx
 }
 
 func buildConsentContext(profile *IdentityProfile) map[string]any {
-	context := map[string]any{
+	consentCtx := map[string]any{
 		identityContextKey: profile.ID,
 	}
 	if profile.MatrixUserID != "" {
-		context["matrix_user_id"] = profile.MatrixUserID
+		consentCtx["matrix_user_id"] = profile.MatrixUserID
 	}
-	return context
+	return consentCtx
 }
 
 func (s *service) buildIDTokenClaims(profile *IdentityProfile) map[string]any {

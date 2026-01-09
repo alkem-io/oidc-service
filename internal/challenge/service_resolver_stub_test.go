@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	defaultAlkemioUserID  = "0f8fad5b-d9cb-469f-a165-70867728950e"
+	defaultAlkemioActorID = "0f8fad5b-d9cb-469f-a165-70867728950e"
 	defaultAlkemioAgentID = "3b241101-e2bb-4255-8caf-4136c566a962"
 )
 
@@ -19,5 +19,5 @@ func (s alkemioResolverStub) Resolve(ctx context.Context, authenticationID strin
 	if s.resolve != nil {
 		return s.resolve(ctx, authenticationID)
 	}
-	return &alkemio.IdentityMapping{UserID: defaultAlkemioUserID, AgentID: defaultAlkemioAgentID}, nil
+	return &alkemio.IdentityMapping{UserID: defaultAlkemioActorID, AgentID: defaultAlkemioAgentID}, nil
 }

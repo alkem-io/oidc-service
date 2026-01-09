@@ -17,6 +17,12 @@ import (
 	middlewarepkg "github.com/alkem-io/oidc-service/internal/middleware"
 )
 
+// WebhookHandler defines the interface for Kratos webhook handling.
+type WebhookHandler interface {
+	// PostLogin handles POST /webhooks/kratos/post-login requests.
+	PostLogin(w http.ResponseWriter, r *http.Request)
+}
+
 // Options bundles router dependencies.
 type Options struct {
 	Logger             *zap.Logger
@@ -26,6 +32,7 @@ type Options struct {
 	SessionCookie      string
 	KratosBrowserURL   string
 	LoginReturnBaseURL string
+	WebhookHandler     WebhookHandler
 }
 
 // NewRouter wires core middleware and health endpoints.
@@ -119,6 +126,10 @@ func NewRouter(opts Options) http.Handler {
 				consentHandler.Handle(w, r)
 			},
 		)
+	}
+
+	if opts.WebhookHandler != nil {
+		r.Post("/webhooks/kratos/post-login", opts.WebhookHandler.PostLogin)
 	}
 
 	return r

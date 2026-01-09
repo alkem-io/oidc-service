@@ -62,5 +62,5 @@ Uses existing `user` table:
 
 ## Dependencies
 
-- `github.com/jackc/pgx/v5` v5.7.5 - PostgreSQL driver
+- `github.com/jackc/pgx/v5` v5.8.0 - PostgreSQL driver
 - `sqlc` v1.30.0 - SQL code generation (build tool)

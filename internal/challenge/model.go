@@ -48,13 +48,13 @@ type TokenClaims struct {
 	FamilyName     *string `json:"family_name,omitempty"`
 	EmailVerified  *bool   `json:"email_verified,omitempty"`
 	AcceptedTerms  *bool   `json:"accepted_terms,omitempty"`
-	AlkemioUserID  *string `json:"alkemio_user_id,omitempty"`
+	AlkemioActorID *string `json:"alkemio_actor_id,omitempty"`
 	AlkemioAgentID *string `json:"agent_id,omitempty"`
 }
 
 // IsEmpty returns true if no claims are set.
 func (tc *TokenClaims) IsEmpty() bool {
-	return tc.GivenName == nil && tc.FamilyName == nil && tc.EmailVerified == nil && tc.AcceptedTerms == nil && tc.AlkemioUserID == nil && tc.AlkemioAgentID == nil
+	return tc.GivenName == nil && tc.FamilyName == nil && tc.EmailVerified == nil && tc.AcceptedTerms == nil && tc.AlkemioActorID == nil && tc.AlkemioAgentID == nil
 }
 
 // ToAccessTokenMap converts claims appropriate for Access tokens to a map.
@@ -66,8 +66,8 @@ func (tc *TokenClaims) ToAccessTokenMap() map[string]any {
 	if tc.FamilyName != nil {
 		claims["family_name"] = *tc.FamilyName
 	}
-	if tc.AlkemioUserID != nil {
-		claims["alkemio_user_id"] = *tc.AlkemioUserID
+	if tc.AlkemioActorID != nil {
+		claims["alkemio_actor_id"] = *tc.AlkemioActorID
 	}
 	if tc.AlkemioAgentID != nil {
 		claims["agent_id"] = *tc.AlkemioAgentID
@@ -90,8 +90,8 @@ func (tc *TokenClaims) ToIDTokenMap() map[string]any {
 	if tc.AcceptedTerms != nil {
 		claims["accepted_terms"] = *tc.AcceptedTerms
 	}
-	if tc.AlkemioUserID != nil {
-		claims["alkemio_user_id"] = *tc.AlkemioUserID
+	if tc.AlkemioActorID != nil {
+		claims["alkemio_actor_id"] = *tc.AlkemioActorID
 	}
 	if tc.AlkemioAgentID != nil {
 		claims["agent_id"] = *tc.AlkemioAgentID

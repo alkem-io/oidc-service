@@ -13,8 +13,12 @@ type KratosAdminClient struct {
 }
 
 // NewKratosAdminClient creates a KratosAdminClient from an existing Ory client.
-func NewKratosAdminClient(api *kratosClient.APIClient) *KratosAdminClient {
-	return &KratosAdminClient{api: api}
+// Returns an error if the api client is nil.
+func NewKratosAdminClient(api *kratosClient.APIClient) (*KratosAdminClient, error) {
+	if api == nil {
+		return nil, fmt.Errorf("kratos api client is nil")
+	}
+	return &KratosAdminClient{api: api}, nil
 }
 
 // PatchIdentity updates identity metadata using JSON Patch.

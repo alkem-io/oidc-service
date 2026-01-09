@@ -21,7 +21,7 @@ const (
 	contractConsentChallenge = "consent-test"
 )
 
-func TestConsentAddsAlkemioUserIDClaim(t *testing.T) {
+func TestConsentAddsAlkemioActorIDClaim(t *testing.T) {
 	t.Parallel()
 
 	consent := hydraAdmin.NewOAuth2ConsentRequest(contractConsentChallenge)

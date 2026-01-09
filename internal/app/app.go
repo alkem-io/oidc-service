@@ -65,7 +65,11 @@ func New(cfg *config.ServiceConfig) (*App, error) {
 		return nil, err
 	}
 
-	app.server = newHTTPServer(cfg, logger, oryClients, challengeSvc, identityResolver)
+	httpServer, err := newHTTPServer(cfg, logger, oryClients, challengeSvc, identityResolver)
+	if err != nil {
+		return nil, err
+	}
+	app.server = httpServer
 
 	return app, nil
 }
@@ -280,17 +284,21 @@ func newHTTPServer(
 	ory *oryClients,
 	challengeSvc challenge.Service,
 	identityResolver *alkemio.CompositeResolver,
-) *http.Server {
+) (*http.Server, error) {
 	maint := maintenance.NewState(cfg.Maintenance())
 
-	kratosAdmin := webhook.NewKratosAdminClient(ory.kratos.Admin())
+	kratosAdmin, err := webhook.NewKratosAdminClient(ory.kratos.Admin())
+	if err != nil {
+		return nil, fmt.Errorf("configure kratos admin client: %w", err)
+	}
+
 	webhookHandler, err := webhook.NewHandler(webhook.HandlerConfig{
 		Resolver: identityResolver,
 		Kratos:   kratosAdmin,
 		Logger:   logger,
 	})
 	if err != nil {
-		logger.Warn("failed to create webhook handler", zap.Error(err))
+		return nil, fmt.Errorf("configure webhook handler: %w", err)
 	}
 
 	handler := server.NewRouter(server.Options{
@@ -309,5 +317,5 @@ func newHTTPServer(
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       120 * time.Second,
-	}
+	}, nil
 }

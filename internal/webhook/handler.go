@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/alkem-io/oidc-service/internal/alkemio"
+	"github.com/alkem-io/oidc-service/internal/middleware"
 )
 
 // AlkemioResolver resolves Alkemio identity mappings from authentication IDs.
@@ -74,14 +75,23 @@ func (e *ConfigError) Error() string {
 	return e.Field + ": " + e.Message
 }
 
+// loggerFromCtx returns the request-scoped logger from context, falling back to the static logger.
+func (h *Handler) loggerFromCtx(ctx context.Context) *zap.Logger {
+	if logger := middleware.Logger(ctx); logger != nil {
+		return logger
+	}
+	return h.logger
+}
+
 // PostLogin handles POST /webhooks/kratos/post-login requests.
 // It resolves Alkemio claims and patches the identity via Kratos Admin API.
 func (h *Handler) PostLogin(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	logger := h.loggerFromCtx(ctx)
 
 	identityID, mapping, err := h.resolveIdentity(ctx, r)
 	if err != nil {
-		h.handleError(w, err)
+		h.handleError(ctx, w, err)
 		return
 	}
 
@@ -98,59 +108,31 @@ func (h *Handler) PostLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.kratos.PatchIdentity(ctx, identityID, patches); err != nil {
-		h.logger.Error("failed to patch identity metadata",
+		logger.Error("failed to patch identity metadata",
 			zap.String("identity_id", maskID(identityID)),
 			zap.Error(err),
 		)
-		h.writeError(w, http.StatusInternalServerError, "patch_failed", "failed to update identity metadata")
+		h.writeError(ctx, w, http.StatusInternalServerError, "patch_failed", "failed to update identity metadata")
 		return
 	}
 
-	h.logger.Info("patched identity metadata",
+	logger.Info("patched identity metadata",
 		zap.String("identity_id", maskID(identityID)),
 		zap.String("actor_id", maskID(mapping.UserID)),
 		zap.String("agent_id", maskID(mapping.AgentID)),
 	)
 
 	// Return empty success response (Kratos doesn't parse this for login)
-	h.writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-}
-
-// PostRegistration handles POST /webhooks/kratos/post-registration requests.
-// It resolves Alkemio claims and returns them for Kratos to store in metadata_public.
-func (h *Handler) PostRegistration(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	identityID, mapping, err := h.resolveIdentity(ctx, r)
-	if err != nil {
-		h.handleError(w, err)
-		return
-	}
-
-	h.logger.Info("resolved alkemio identity for registration",
-		zap.String("identity_id", maskID(identityID)),
-		zap.String("actor_id", maskID(mapping.UserID)),
-		zap.String("agent_id", maskID(mapping.AgentID)),
-	)
-
-	// Return response for Kratos to parse and store in identity
-	resp := Response{
-		Identity: IdentityUpdate{
-			MetadataPublic: &MetadataPublic{
-				AlkemioActorID: mapping.UserID,
-				AlkemioAgentID: mapping.AgentID,
-			},
-		},
-	}
-
-	h.writeJSON(w, http.StatusOK, resp)
+	h.writeJSON(ctx, w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // resolveIdentity parses the request and resolves Alkemio identity.
 func (h *Handler) resolveIdentity(ctx context.Context, r *http.Request) (string, *alkemio.IdentityMapping, error) {
+	logger := h.loggerFromCtx(ctx)
+
 	var req Request
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.logger.Warn("failed to decode webhook request", zap.Error(err))
+		logger.Warn("failed to decode webhook request", zap.Error(err))
 		return "", nil, &webhookError{
 			status:  http.StatusBadRequest,
 			code:    "bad_request",
@@ -160,7 +142,7 @@ func (h *Handler) resolveIdentity(ctx context.Context, r *http.Request) (string,
 
 	identityID := strings.TrimSpace(req.IdentityID)
 	if identityID == "" {
-		h.logger.Warn("webhook request missing identity_id")
+		logger.Warn("webhook request missing identity_id")
 		return "", nil, &webhookError{
 			status:  http.StatusBadRequest,
 			code:    "bad_request",
@@ -168,13 +150,13 @@ func (h *Handler) resolveIdentity(ctx context.Context, r *http.Request) (string,
 		}
 	}
 
-	h.logger.Debug("processing webhook request",
+	logger.Debug("processing webhook request",
 		zap.String("identity_id", maskID(identityID)),
 	)
 
 	mapping, err := h.resolver.Resolve(ctx, identityID)
 	if err != nil {
-		h.logger.Error("failed to resolve alkemio identity",
+		logger.Error("failed to resolve alkemio identity",
 			zap.String("identity_id", maskID(identityID)),
 			zap.String("error_type", classifyError(err)),
 			zap.Error(err),
@@ -187,7 +169,7 @@ func (h *Handler) resolveIdentity(ctx context.Context, r *http.Request) (string,
 	}
 
 	if err := h.validateMapping(mapping); err != nil {
-		h.logger.Error("resolved mapping has invalid UUIDs",
+		logger.Error("resolved mapping has invalid UUIDs",
 			zap.String("identity_id", maskID(identityID)),
 			zap.Error(err),
 		)
@@ -240,25 +222,25 @@ func (e *webhookError) Error() string {
 	return fmt.Sprintf("%s: %s", e.code, e.message)
 }
 
-func (h *Handler) handleError(w http.ResponseWriter, err error) {
+func (h *Handler) handleError(ctx context.Context, w http.ResponseWriter, err error) {
 	var we *webhookError
 	if errors.As(err, &we) {
-		h.writeError(w, we.status, we.code, we.message)
+		h.writeError(ctx, w, we.status, we.code, we.message)
 		return
 	}
-	h.writeError(w, http.StatusInternalServerError, "internal_error", "unexpected error")
+	h.writeError(ctx, w, http.StatusInternalServerError, "internal_error", "unexpected error")
 }
 
-func (h *Handler) writeJSON(w http.ResponseWriter, status int, v interface{}) {
+func (h *Handler) writeJSON(ctx context.Context, w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
-		h.logger.Error("failed to encode response", zap.Error(err))
+		h.loggerFromCtx(ctx).Error("failed to encode response", zap.Error(err))
 	}
 }
 
-func (h *Handler) writeError(w http.ResponseWriter, status int, code, message string) {
-	h.writeJSON(w, status, ErrorResponse{
+func (h *Handler) writeError(ctx context.Context, w http.ResponseWriter, status int, code, message string) {
+	h.writeJSON(ctx, w, status, ErrorResponse{
 		Error:   code,
 		Message: message,
 	})

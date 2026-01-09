@@ -46,7 +46,7 @@ var (
 	}
 )
 
-func TestConsentEndpointAddsAlkemioUserIDClaim(t *testing.T) {
+func TestConsentEndpointAddsAlkemioActorIDClaim(t *testing.T) {
 	consent := hydraAdmin.NewOAuth2ConsentRequest(challengeConsentID)
 	consent.SetSubject(testResolverFixture.AuthenticationID)
 	consent.SetContext(map[string]any{"identity_id": testResolverFixture.AuthenticationID})

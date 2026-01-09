@@ -30,11 +30,11 @@ Session includes metadata_public → Oathkeeper → Backend
 | JSON Patch `op: add` | Works whether `metadata_public` exists or is null |
 | HTTP 500 on failure | Sessions MUST have claims; resolution failures block login |
 
-## Endpoints
+## Endpoint
 
 | Endpoint | Trigger | Action |
 |----------|---------|--------|
-| `POST /webhooks/kratos/post-login` | Verification complete, Login | PATCH identity via Admin API |
+| `POST /webhooks/kratos/post-login` | Verification, Login | PATCH identity via Admin API |
 
 ## Breaking Change
 
@@ -42,7 +42,7 @@ Renamed OIDC token claim: `alkemio_user_id` → `alkemio_actor_id`
 
 ## Files
 
-- `internal/webhook/handler.go` - Webhook handlers
+- `internal/webhook/handler.go` - Webhook handler (PostLogin only)
 - `internal/webhook/kratos_admin.go` - Kratos Admin API client
 - `internal/webhook/handler_test.go` - Tests
 - `configs/kratos/alkemio-claims.jsonnet` - Webhook payload template

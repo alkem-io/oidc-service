@@ -5,15 +5,14 @@ Standalone Go 1.25 service that resolves Hydra login and consent challenges, fet
 ## Endpoints
 
 - Public: `/oidc/login`, `/oidc/consent`
-- Webhooks: `/webhooks/kratos/post-login`, `/webhooks/kratos/post-registration`
+- Webhook: `/webhooks/kratos/post-login`
 - Health: `/health/ready`, `/health/live`
 
-### Kratos Webhooks for Alkemio Claims
+### Kratos Webhook for Alkemio Claims
 
-Two webhook endpoints resolve Alkemio identity claims (`alkemio_actor_id`, `alkemio_agent_id`) and store them in `identity.metadata_public`:
+Webhook endpoint resolves Alkemio identity claims (`alkemio_actor_id`, `alkemio_agent_id`) and stores them in `identity.metadata_public` via Kratos Admin API.
 
-- **`/webhooks/kratos/post-registration`** - Returns claims in response; Kratos parses and stores them
-- **`/webhooks/kratos/post-login`** - Calls Kratos Admin API to patch identity metadata
+- **`/webhooks/kratos/post-login`** - Called after verification and login; patches identity via Admin API
 
 **Jsonnet payload** (`configs/kratos/alkemio-claims.jsonnet`):
 

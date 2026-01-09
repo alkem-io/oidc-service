@@ -99,7 +99,9 @@ func (h *Handler) PostLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Patch identity metadata via Kratos Admin API
+	// Patch identity metadata via Kratos Admin API.
+	// Use "add" (not "replace") because it creates the path if missing and
+	// replaces if it exists, handling both new and existing identities.
 	patches := []kratosClient.JsonPatch{
 		{
 			Op:   "add",

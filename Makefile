@@ -3,6 +3,10 @@ SERVICE_BIN := $(BIN_DIR)/oidc-service
 DOCSTRINGCOV_BIN := $(BIN_DIR)/docstringcov
 DOCSTRINGCOV_FLAGS ?=
 
+# Docker settings
+DOCKER_IMAGE ?= alkemio/oidc-service
+DOCKER_TAG ?= latest
+
 # Go commands
 GO?=go
 GOTEST=$(GO) test
@@ -13,7 +17,7 @@ GOFMT=$(GO) fmt
 SQLC?=sqlc
 
 
-.PHONY: build build-service build-docstringcov test lint fmt generate sqlc docstring-coverage
+.PHONY: build build-service build-docstringcov docker-build test lint fmt generate sqlc docstring-coverage
 
 # Build all binaries.
 build: build-service build-docstringcov
@@ -27,6 +31,10 @@ build-service:
 build-docstringcov:
 	mkdir -p $(BIN_DIR)
 	$(GO) build -o $(DOCSTRINGCOV_BIN) ./cmd/docstringcov
+
+# Build Docker image for native architecture.
+docker-build:
+	docker build -t $(DOCKER_IMAGE):$(DOCKER_TAG) .
 
 # Run the full Go test suite.
 test:

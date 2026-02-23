@@ -49,12 +49,11 @@ type TokenClaims struct {
 	EmailVerified  *bool   `json:"email_verified,omitempty"`
 	AcceptedTerms  *bool   `json:"accepted_terms,omitempty"`
 	AlkemioActorID *string `json:"alkemio_actor_id,omitempty"`
-	AlkemioAgentID *string `json:"agent_id,omitempty"`
 }
 
 // IsEmpty returns true if no claims are set.
 func (tc *TokenClaims) IsEmpty() bool {
-	return tc.GivenName == nil && tc.FamilyName == nil && tc.EmailVerified == nil && tc.AcceptedTerms == nil && tc.AlkemioActorID == nil && tc.AlkemioAgentID == nil
+	return tc.GivenName == nil && tc.FamilyName == nil && tc.EmailVerified == nil && tc.AcceptedTerms == nil && tc.AlkemioActorID == nil
 }
 
 // ToAccessTokenMap converts claims appropriate for Access tokens to a map.
@@ -68,9 +67,6 @@ func (tc *TokenClaims) ToAccessTokenMap() map[string]any {
 	}
 	if tc.AlkemioActorID != nil {
 		claims["alkemio_actor_id"] = *tc.AlkemioActorID
-	}
-	if tc.AlkemioAgentID != nil {
-		claims["agent_id"] = *tc.AlkemioAgentID
 	}
 	return claims
 }
@@ -92,9 +88,6 @@ func (tc *TokenClaims) ToIDTokenMap() map[string]any {
 	}
 	if tc.AlkemioActorID != nil {
 		claims["alkemio_actor_id"] = *tc.AlkemioActorID
-	}
-	if tc.AlkemioAgentID != nil {
-		claims["agent_id"] = *tc.AlkemioAgentID
 	}
 	return claims
 }
@@ -220,7 +213,9 @@ func NewKratosFailureError(challengeID, message string) *BaseError {
 
 // NewAlkemioIdentityMissingError reports that the Alkemio resolver did not find the identity mapping.
 func NewAlkemioIdentityMissingError(challengeID string) *BaseError {
-	return NewError(http.StatusForbidden, "alkemio_identity_missing", "alkemio user mapping not found", challengeID, nil)
+	return NewError(
+		http.StatusForbidden, "alkemio_identity_missing", "alkemio user mapping not found", challengeID, nil,
+	)
 }
 
 // NewAlkemioResolutionError reports a general failure talking to the Alkemio resolver.

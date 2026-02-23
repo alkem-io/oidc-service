@@ -1,4 +1,4 @@
 -- name: GetUserByAuthenticationID :one
-SELECT "id", "agentId"
+SELECT "id"
 FROM "user"
 WHERE "authenticationID" = $1;

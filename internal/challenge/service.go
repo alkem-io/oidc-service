@@ -42,7 +42,7 @@ type IdentityFetcher interface {
 	Fetch(ctx context.Context, identityID string) (*IdentityProfile, error)
 }
 
-// AlkemioResolver resolves internal Alkemio user/agent identifiers from Kratos identities.
+// AlkemioResolver resolves the Alkemio actor identifier from Kratos identities.
 type AlkemioResolver interface {
 	// Resolve resolves the Alkemio identity mapping.
 	Resolve(ctx context.Context, authenticationID string) (*alkemio.IdentityMapping, error)
@@ -204,7 +204,9 @@ func (s *service) ResolveLogin(ctx context.Context, challengeID string) (*Resolu
 	return s.resolveLoginStandard(ctx, challengeID, req)
 }
 
-func (s *service) resolveLoginSkip(ctx context.Context, challengeID string, req *hydraAdmin.OAuth2LoginRequest) (*Resolution, error) {
+func (s *service) resolveLoginSkip(
+	ctx context.Context, challengeID string, req *hydraAdmin.OAuth2LoginRequest,
+) (*Resolution, error) {
 	contextData := readLoginContext(req)
 	subject, err := s.determineSkipSubject(ctx, challengeID, req, contextData)
 	if err != nil {
@@ -231,7 +233,9 @@ func (s *service) resolveLoginSkip(ctx context.Context, challengeID string, req 
 	return resolutionFromRedirect(challengeID, redirect)
 }
 
-func (s *service) determineSkipSubject(ctx context.Context, challengeID string, req *hydraAdmin.OAuth2LoginRequest, contextData interface{}) (string, error) {
+func (s *service) determineSkipSubject(
+	ctx context.Context, challengeID string, req *hydraAdmin.OAuth2LoginRequest, contextData interface{},
+) (string, error) {
 	subject := strings.TrimSpace(req.GetSubject())
 
 	if ctxID := readIdentityID(contextData); ctxID != "" {
@@ -267,7 +271,9 @@ func (s *service) determineSkipSubject(ctx context.Context, challengeID string, 
 	return "", NewSessionInvalidError(challengeID)
 }
 
-func (s *service) resolveLoginStandard(ctx context.Context, challengeID string, req *hydraAdmin.OAuth2LoginRequest) (*Resolution, error) {
+func (s *service) resolveLoginStandard(
+	ctx context.Context, challengeID string, req *hydraAdmin.OAuth2LoginRequest,
+) (*Resolution, error) {
 	identityID := strings.TrimSpace(req.GetSubject())
 	if identityID == "" {
 		provider := IdentityHintProviderFromContext(ctx)
@@ -472,7 +478,8 @@ func mapHydraError(flow FlowType, challengeID string, resp *http.Response, err e
 			return NewInvalidChallengeError(challengeID)
 		case http.StatusBadRequest:
 			return NewError(
-				http.StatusBadRequest, "invalid_challenge", fmt.Sprintf("hydra rejected %s challenge", flow), challengeID, nil,
+				http.StatusBadRequest, "invalid_challenge", fmt.Sprintf("hydra rejected %s challenge", flow),
+				challengeID, nil,
 			)
 		}
 	}
@@ -541,7 +548,8 @@ func (s *service) attachAlkemioClaim(ctx context.Context, challengeID string, pr
 
 	maskedIdentity := maskIdentityID(profile.ID)
 	if s.logger != nil {
-		s.logger.Debug("resolving alkemio identity mapping",
+		s.logger.Debug(
+			"resolving alkemio identity mapping",
 			"challenge_id", challengeID,
 			"identity_id", maskedIdentity,
 		)
@@ -550,7 +558,8 @@ func (s *service) attachAlkemioClaim(ctx context.Context, challengeID string, pr
 	mapping, err := s.alkemio.Resolve(ctx, profile.ID)
 	if err != nil {
 		if s.logger != nil {
-			s.logger.Warn("failed to resolve alkemio identity mapping",
+			s.logger.Warn(
+				"failed to resolve alkemio identity mapping",
 				"challenge_id", challengeID,
 				"identity_id", maskedIdentity,
 				"error_type", classifyAlkemioErrorType(err),
@@ -563,7 +572,8 @@ func (s *service) attachAlkemioClaim(ctx context.Context, challengeID string, pr
 	validated, err := validateAlkemioMapping(mapping)
 	if err != nil {
 		if s.logger != nil {
-			s.logger.Warn("received invalid alkemio identity mapping",
+			s.logger.Warn(
+				"received invalid alkemio identity mapping",
 				"challenge_id", challengeID,
 				"identity_id", maskedIdentity,
 				"error_type", classifyAlkemioErrorType(err),
@@ -574,17 +584,16 @@ func (s *service) attachAlkemioClaim(ctx context.Context, challengeID string, pr
 	}
 
 	if s.logger != nil {
-		s.logger.Debug("resolved alkemio identity mapping",
+		s.logger.Debug(
+			"resolved alkemio identity mapping",
 			"challenge_id", challengeID,
 			"identity_id", maskedIdentity,
-			"alkemio_actor_id", maskIdentityID(validated.UserID),
-			"agent_id", maskIdentityID(validated.AgentID),
+			"alkemio_actor_id", maskIdentityID(validated.ActorID),
 		)
 	}
 
 	profile.TokenClaims = ensureTokenClaims(profile.TokenClaims)
-	profile.TokenClaims.AlkemioActorID = stringPointer(validated.UserID)
-	profile.TokenClaims.AlkemioAgentID = stringPointer(validated.AgentID)
+	profile.TokenClaims.AlkemioActorID = stringPointer(validated.ActorID)
 	return nil
 }
 
@@ -623,9 +632,6 @@ func (s *service) buildIDTokenClaims(profile *IdentityProfile) map[string]any {
 	if profile.MatrixUserID != "" {
 		claims["matrix_user_id"] = profile.MatrixUserID
 	}
-	if profile.TokenClaims != nil && profile.TokenClaims.AlkemioAgentID != nil {
-		claims["agent_id"] = *profile.TokenClaims.AlkemioAgentID
-	}
 
 	var extraClaims map[string]any
 	if profile.TokenClaims != nil && !profile.TokenClaims.IsEmpty() {
@@ -645,9 +651,6 @@ func (s *service) buildAccessTokenClaims(profile *IdentityProfile) map[string]an
 	if profile.MatrixUserID != "" {
 		claims["matrix_user_id"] = profile.MatrixUserID
 	}
-	if profile.TokenClaims != nil && profile.TokenClaims.AlkemioAgentID != nil {
-		claims["agent_id"] = *profile.TokenClaims.AlkemioAgentID
-	}
 	if len(profile.Traits) > 0 {
 		claims["traits"] = cloneTraits(profile.Traits)
 	}
@@ -661,7 +664,9 @@ func (s *service) buildAccessTokenClaims(profile *IdentityProfile) map[string]an
 	return claims
 }
 
-func (s *service) appendEnhancedClaims(logLabel string, profile *IdentityProfile, claims map[string]any, extra map[string]any) {
+func (s *service) appendEnhancedClaims(
+	logLabel string, profile *IdentityProfile, claims map[string]any, extra map[string]any,
+) {
 	count := len(extra)
 	if count > 0 {
 		for key, value := range extra {
@@ -669,7 +674,8 @@ func (s *service) appendEnhancedClaims(logLabel string, profile *IdentityProfile
 		}
 
 		if s.logger != nil {
-			s.logger.Debug("added enhanced claims to "+logLabel,
+			s.logger.Debug(
+				"added enhanced claims to "+logLabel,
 				"identity_id", profile.ID,
 				"claims_added", count,
 			)

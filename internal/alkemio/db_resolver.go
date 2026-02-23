@@ -40,14 +40,15 @@ func NewDatabaseResolver(pool *pgxpool.Pool, logger *zap.Logger) *DatabaseResolv
 	}
 }
 
-// Resolve looks up the Alkemio UserID and AgentID for the given authenticationID.
+// Resolve looks up the Alkemio ActorID for the given authenticationID.
 func (r *DatabaseResolver) Resolve(ctx context.Context, authenticationID string) (*IdentityMapping, error) {
 	if r == nil || r.queries == nil {
 		return nil, errors.New("database resolver is not initialized")
 	}
 
 	id := strings.TrimSpace(authenticationID)
-	r.logger.Debug("resolving identity from database",
+	r.logger.Debug(
+		"resolving identity from database",
 		zap.String("authentication_id", maskUUID(id)),
 	)
 
@@ -58,14 +59,16 @@ func (r *DatabaseResolver) Resolve(ctx context.Context, authenticationID string)
 
 	parsedUUID, err := uuid.Parse(id)
 	if err != nil {
-		r.logger.Debug("authentication id validation failed: invalid uuid",
+		r.logger.Debug(
+			"authentication id validation failed: invalid uuid",
 			zap.String("authentication_id", maskUUID(id)),
 			zap.Error(err),
 		)
 		return nil, fmt.Errorf("authentication id must be a valid uuid: %w", err)
 	}
 
-	r.logger.Debug("parsed authentication id",
+	r.logger.Debug(
+		"parsed authentication id",
 		zap.String("parsed_uuid", maskUUID(parsedUUID.String())),
 	)
 
@@ -74,70 +77,63 @@ func (r *DatabaseResolver) Resolve(ctx context.Context, authenticationID string)
 		Valid: true,
 	}
 
-	r.logger.Debug("querying database for user",
+	r.logger.Debug(
+		"querying database for user",
 		zap.String("authentication_id", maskUUID(id)),
 	)
 
 	row, err := r.queries.GetUserByAuthenticationID(ctx, authUUID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			r.logger.Debug("user not found in database",
+			r.logger.Debug(
+				"user not found in database",
 				zap.String("authentication_id", maskUUID(id)),
 			)
 			return nil, ErrDBNotFound
 		}
-		r.logger.Error("database query failed",
+		r.logger.Error(
+			"database query failed",
 			zap.String("authentication_id", maskUUID(id)),
 			zap.Error(err),
 		)
 		return nil, fmt.Errorf("database query failed: %w", err)
 	}
 
-	if !row.ID.Valid || !row.AgentId.Valid {
-		r.logger.Debug("database returned invalid row: missing user_id or agent_id",
+	if !row.Valid {
+		r.logger.Debug(
+			"database returned invalid row: missing id",
 			zap.String("authentication_id", maskUUID(id)),
-			zap.Bool("user_id_valid", row.ID.Valid),
-			zap.Bool("agent_id_valid", row.AgentId.Valid),
 		)
 		return nil, ErrDBNotFound
 	}
 
-	userID := uuidToString(row.ID)
-	agentID := uuidToString(row.AgentId)
+	actorID := uuidToString(row)
 
-	if userID == "" || agentID == "" {
-		r.logger.Debug("uuid conversion returned empty string",
+	if actorID == "" {
+		r.logger.Debug(
+			"uuid conversion returned empty string",
 			zap.String("authentication_id", maskUUID(id)),
-			zap.Bool("user_id_empty", userID == ""),
-			zap.Bool("agent_id_empty", agentID == ""),
 		)
 		return nil, ErrDBNotFound
 	}
 
-	if !isUUID(userID) {
-		r.logger.Error("database returned invalid user id format",
+	if !isUUID(actorID) {
+		r.logger.Error(
+			"database returned invalid actor id format",
 			zap.String("authentication_id", maskUUID(id)),
-			zap.String("user_id", maskUUID(userID)),
+			zap.String("actor_id", maskUUID(actorID)),
 		)
-		return nil, fmt.Errorf("database returned invalid user id")
-	}
-	if !isUUID(agentID) {
-		r.logger.Error("database returned invalid agent id format",
-			zap.String("authentication_id", maskUUID(id)),
-			zap.String("agent_id", maskUUID(agentID)),
-		)
-		return nil, fmt.Errorf("database returned invalid agent id")
+		return nil, fmt.Errorf("database returned invalid actor id")
 	}
 
-	r.logger.Info("identity resolved from database",
+	r.logger.Info(
+		"identity resolved from database",
 		zap.String("authentication_id", maskUUID(id)),
-		zap.String("user_id", maskUUID(userID)),
-		zap.String("agent_id", maskUUID(agentID)),
+		zap.String("actor_id", maskUUID(actorID)),
 	)
 
 	return &IdentityMapping{
-		UserID:  userID,
-		AgentID: agentID,
+		ActorID: actorID,
 	}, nil
 }
 

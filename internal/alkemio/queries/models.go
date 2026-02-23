@@ -11,5 +11,4 @@ import (
 type User struct {
 	ID               pgtype.UUID
 	AuthenticationID pgtype.UUID
-	AgentId          pgtype.UUID
 }

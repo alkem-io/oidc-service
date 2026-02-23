@@ -69,10 +69,10 @@ func TestAccessTokenClaimsContract(t *testing.T) {
 	}
 }
 
-func TestAccessTokenClaimsIncludeAgentID(t *testing.T) {
+func TestAccessTokenClaimsIncludeActorID(t *testing.T) {
 	t.Parallel()
 
-	const challengeID = "access-token-agent-claims"
+	const challengeID = "access-token-actor-claims"
 	consent := hydraAdmin.NewOAuth2ConsentRequest(challengeID)
 	consent.SetSubject(contractKratosID)
 	consent.SetContext(map[string]any{"identity_id": contractKratosID})
@@ -80,11 +80,15 @@ func TestAccessTokenClaimsIncludeAgentID(t *testing.T) {
 	var capturedAccess map[string]any
 
 	hydraStub := &testsupport.HydraClientStub{
-		GetConsentFunc: func(_ context.Context, requested string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
+		GetConsentFunc: func(_ context.Context, requested string) (
+			*hydraAdmin.OAuth2ConsentRequest, *http.Response, error,
+		) {
 			require.Equal(t, challengeID, requested)
 			return consent, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 		},
-		AcceptConsentFunc: func(_ context.Context, requested string, body *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
+		AcceptConsentFunc: func(
+			_ context.Context, requested string, body *hydraAdmin.AcceptOAuth2ConsentRequest,
+		) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
 			require.Equal(t, challengeID, requested)
 			session := body.GetSession()
 			if claims, ok := session.GetAccessToken().(map[string]any); ok {
@@ -104,7 +108,7 @@ func TestAccessTokenClaimsIncludeAgentID(t *testing.T) {
 	resolverStub := testsupport.AlkemioResolverStub{
 		ResolveFunc: func(_ context.Context, authenticationID string) (*alkemio.IdentityMapping, error) {
 			require.Equal(t, contractKratosID, authenticationID)
-			return testsupport.NewAlkemioMapping(contractUserID, contractAgentID), nil
+			return testsupport.NewAlkemioMapping(contractUserID), nil
 		},
 	}
 
@@ -114,5 +118,5 @@ func TestAccessTokenClaimsIncludeAgentID(t *testing.T) {
 	_, err = svc.ResolveConsent(context.Background(), challengeID)
 	require.NoError(t, err)
 	require.NotNil(t, capturedAccess, "access token claims not captured")
-	require.Equal(t, contractAgentID, capturedAccess["agent_id"])
+	require.Equal(t, contractUserID, capturedAccess["alkemio_actor_id"])
 }

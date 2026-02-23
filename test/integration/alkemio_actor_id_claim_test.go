@@ -31,18 +31,16 @@ const (
 	challengeErrorID     = "integration-error"
 	challengeTimeoutID   = "integration-timeout"
 	challengeMaintID     = "integration-maintenance"
-	challengeInvalidID   = "integration-invalid-agent"
+	challengeInvalidID   = "integration-invalid-actor"
 )
 
 var (
 	testResolverFixture = struct {
 		AuthenticationID string
-		UserID           string
-		AgentID          string
+		ActorID          string
 	}{
 		AuthenticationID: "8c0b7f5a-4dce-4d13-b6ad-6b2df2c1d10c",
-		UserID:           "1bcf5bd1-5f3e-4f01-9125-0edc93e5f5b1",
-		AgentID:          "6f4ed2d2-0ad0-4b83-8d43-8d9b9b4970b3",
+		ActorID:          "1bcf5bd1-5f3e-4f01-9125-0edc93e5f5b1",
 	}
 )
 
@@ -57,13 +55,17 @@ func TestConsentEndpointAddsAlkemioActorIDClaim(t *testing.T) {
 	)
 
 	hydraStub := &testsupport.HydraClientStub{
-		GetConsentFunc: func(_ context.Context, challengeID string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
+		GetConsentFunc: func(_ context.Context, challengeID string) (
+			*hydraAdmin.OAuth2ConsentRequest, *http.Response, error,
+		) {
 			if challengeID != challengeConsentID {
 				t.Fatalf("unexpected challenge id: %s", challengeID)
 			}
 			return consent, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 		},
-		AcceptConsentFunc: func(_ context.Context, _ string, body *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
+		AcceptConsentFunc: func(
+			_ context.Context, _ string, body *hydraAdmin.AcceptOAuth2ConsentRequest,
+		) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
 			session := body.GetSession()
 			if claims, ok := session.GetAccessToken().(map[string]any); ok {
 				capturedAccess = claims
@@ -87,7 +89,7 @@ func TestConsentEndpointAddsAlkemioActorIDClaim(t *testing.T) {
 
 	resolverStub := testsupport.AlkemioResolverStub{
 		ResolveFunc: func(_ context.Context, _ string) (*alkemio.IdentityMapping, error) {
-			return testsupport.NewAlkemioMapping(testResolverFixture.UserID, testResolverFixture.AgentID), nil
+			return testsupport.NewAlkemioMapping(testResolverFixture.ActorID), nil
 		},
 	}
 
@@ -96,11 +98,13 @@ func TestConsentEndpointAddsAlkemioActorIDClaim(t *testing.T) {
 		t.Fatalf(errFmtNewService, err)
 	}
 
-	router := server.NewRouter(server.Options{
-		Logger:      zap.NewNop(),
-		Maintenance: maintenance.NewState(config.MaintenanceState{}),
-		Challenge:   svc,
-	})
+	router := server.NewRouter(
+		server.Options{
+			Logger:      zap.NewNop(),
+			Maintenance: maintenance.NewState(config.MaintenanceState{}),
+			Challenge:   svc,
+		},
+	)
 
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf(consentPathFormat, challengeConsentID), nil)
 	rec := httptest.NewRecorder()
@@ -114,17 +118,11 @@ func TestConsentEndpointAddsAlkemioActorIDClaim(t *testing.T) {
 		t.Fatal("expected redirect location")
 	}
 
-	if capturedAccess["alkemio_actor_id"] != testResolverFixture.UserID {
+	if capturedAccess["alkemio_actor_id"] != testResolverFixture.ActorID {
 		t.Fatalf("access token missing alkemio_actor_id: %v", capturedAccess)
 	}
-	if capturedAccess["agent_id"] != testResolverFixture.AgentID {
-		t.Fatalf("access token missing agent_id: %v", capturedAccess)
-	}
-	if capturedID["alkemio_actor_id"] != testResolverFixture.UserID {
+	if capturedID["alkemio_actor_id"] != testResolverFixture.ActorID {
 		t.Fatalf("id token missing alkemio_actor_id: %v", capturedID)
-	}
-	if capturedID["agent_id"] != testResolverFixture.AgentID {
-		t.Fatalf("id token missing agent_id: %v", capturedID)
 	}
 }
 
@@ -136,7 +134,9 @@ func TestConsentEndpointFailsWhenIdentityMissing(t *testing.T) {
 		GetConsentFunc: func(_ context.Context, _ string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
 			return consent, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 		},
-		AcceptConsentFunc: func(_ context.Context, _ string, _ *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
+		AcceptConsentFunc: func(
+			_ context.Context, _ string, _ *hydraAdmin.AcceptOAuth2ConsentRequest,
+		) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
 			t.Fatal("accept consent should not be invoked on failure")
 			return nil, nil, nil
 		},
@@ -163,11 +163,13 @@ func TestConsentEndpointFailsWhenIdentityMissing(t *testing.T) {
 		t.Fatalf(errFmtNewService, err)
 	}
 
-	router := server.NewRouter(server.Options{
-		Logger:      zap.NewNop(),
-		Maintenance: maintenance.NewState(config.MaintenanceState{}),
-		Challenge:   svc,
-	})
+	router := server.NewRouter(
+		server.Options{
+			Logger:      zap.NewNop(),
+			Maintenance: maintenance.NewState(config.MaintenanceState{}),
+			Challenge:   svc,
+		},
+	)
 
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf(consentPathFormat, challengeMissingID), nil)
 	rec := httptest.NewRecorder()
@@ -196,7 +198,9 @@ func TestConsentEndpointFailsOnResolverError(t *testing.T) {
 		GetConsentFunc: func(_ context.Context, _ string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
 			return consent, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 		},
-		AcceptConsentFunc: func(context.Context, string, *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
+		AcceptConsentFunc: func(
+			context.Context, string, *hydraAdmin.AcceptOAuth2ConsentRequest,
+		) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
 			t.Fatal("accept consent should not be called on resolver error")
 			return nil, nil, nil
 		},
@@ -221,11 +225,13 @@ func TestConsentEndpointFailsOnResolverError(t *testing.T) {
 		t.Fatalf(errFmtNewService, err)
 	}
 
-	router := server.NewRouter(server.Options{
-		Logger:      zap.NewNop(),
-		Maintenance: maintenance.NewState(config.MaintenanceState{}),
-		Challenge:   svc,
-	})
+	router := server.NewRouter(
+		server.Options{
+			Logger:      zap.NewNop(),
+			Maintenance: maintenance.NewState(config.MaintenanceState{}),
+			Challenge:   svc,
+		},
+	)
 
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf(consentPathFormat, challengeErrorID), nil)
 	rec := httptest.NewRecorder()
@@ -247,7 +253,7 @@ func TestConsentEndpointFailsOnResolverError(t *testing.T) {
 	}
 }
 
-func TestConsentEndpointFailsWhenAgentIDInvalid(t *testing.T) {
+func TestConsentEndpointFailsWhenActorIDInvalid(t *testing.T) {
 	consent := hydraAdmin.NewOAuth2ConsentRequest(challengeInvalidID)
 	consent.SetSubject(testResolverFixture.AuthenticationID)
 	consent.SetContext(map[string]any{"identity_id": testResolverFixture.AuthenticationID})
@@ -256,7 +262,9 @@ func TestConsentEndpointFailsWhenAgentIDInvalid(t *testing.T) {
 		GetConsentFunc: func(_ context.Context, _ string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
 			return consent, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 		},
-		AcceptConsentFunc: func(context.Context, string, *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
+		AcceptConsentFunc: func(
+			context.Context, string, *hydraAdmin.AcceptOAuth2ConsentRequest,
+		) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
 			t.Fatal("accept consent should not be called when mapping invalid")
 			return nil, nil, nil
 		},
@@ -270,7 +278,7 @@ func TestConsentEndpointFailsWhenAgentIDInvalid(t *testing.T) {
 
 	resolverStub := testsupport.AlkemioResolverStub{
 		ResolveFunc: func(_ context.Context, _ string) (*alkemio.IdentityMapping, error) {
-			return testsupport.NewAlkemioMapping(testResolverFixture.UserID, "not-a-uuid"), nil
+			return testsupport.NewAlkemioMapping("not-a-uuid"), nil
 		},
 	}
 
@@ -279,11 +287,13 @@ func TestConsentEndpointFailsWhenAgentIDInvalid(t *testing.T) {
 		t.Fatalf(errFmtNewService, err)
 	}
 
-	router := server.NewRouter(server.Options{
-		Logger:      zap.NewNop(),
-		Maintenance: maintenance.NewState(config.MaintenanceState{}),
-		Challenge:   svc,
-	})
+	router := server.NewRouter(
+		server.Options{
+			Logger:      zap.NewNop(),
+			Maintenance: maintenance.NewState(config.MaintenanceState{}),
+			Challenge:   svc,
+		},
+	)
 
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf(consentPathFormat, challengeInvalidID), nil)
 	rec := httptest.NewRecorder()
@@ -311,7 +321,9 @@ func TestConsentEndpointLogsResolverTimeout(t *testing.T) {
 		GetConsentFunc: func(_ context.Context, _ string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
 			return consent, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 		},
-		AcceptConsentFunc: func(context.Context, string, *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
+		AcceptConsentFunc: func(
+			context.Context, string, *hydraAdmin.AcceptOAuth2ConsentRequest,
+		) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
 			t.Fatal("accept consent should not be called on timeout")
 			return nil, nil, nil
 		},
@@ -335,11 +347,13 @@ func TestConsentEndpointLogsResolverTimeout(t *testing.T) {
 		t.Fatalf(errFmtNewService, err)
 	}
 
-	router := server.NewRouter(server.Options{
-		Logger:      zap.NewNop(),
-		Maintenance: maintenance.NewState(config.MaintenanceState{}),
-		Challenge:   svc,
-	})
+	router := server.NewRouter(
+		server.Options{
+			Logger:      zap.NewNop(),
+			Maintenance: maintenance.NewState(config.MaintenanceState{}),
+			Challenge:   svc,
+		},
+	)
 
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf(consentPathFormat, challengeTimeoutID), nil)
 	rec := httptest.NewRecorder()
@@ -391,11 +405,13 @@ func TestMaintenanceShortCircuitsBeforeResolver(t *testing.T) {
 		t.Fatalf(errFmtNewService, err)
 	}
 
-	router := server.NewRouter(server.Options{
-		Logger:      zap.NewNop(),
-		Maintenance: maintState,
-		Challenge:   svc,
-	})
+	router := server.NewRouter(
+		server.Options{
+			Logger:      zap.NewNop(),
+			Maintenance: maintState,
+			Challenge:   svc,
+		},
+	)
 
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf(consentPathFormat, challengeMaintID), nil)
 	rec := httptest.NewRecorder()

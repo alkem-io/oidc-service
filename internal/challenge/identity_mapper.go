@@ -234,29 +234,21 @@ func dedupe(values []string) []string {
 	return result
 }
 
-// validateAlkemioMapping ensures resolver payloads include canonical UUIDs for user and agent ids.
+// validateAlkemioMapping ensures resolver payloads include a canonical UUID for the actor id.
 func validateAlkemioMapping(mapping *alkemio.IdentityMapping) (*alkemio.IdentityMapping, error) {
 	if mapping == nil {
 		return nil, invalidMappingError("mapping missing")
 	}
 
-	userID := strings.TrimSpace(mapping.UserID)
-	if userID == "" {
-		return nil, invalidMappingError("missing user id")
+	actorID := strings.TrimSpace(mapping.ActorID)
+	if actorID == "" {
+		return nil, invalidMappingError("missing actor id")
 	}
-	if _, err := uuid.Parse(userID); err != nil {
-		return nil, invalidMappingError("invalid user id")
-	}
-
-	agentID := strings.TrimSpace(mapping.AgentID)
-	if agentID == "" {
-		return nil, invalidMappingError("missing agent id")
-	}
-	if _, err := uuid.Parse(agentID); err != nil {
-		return nil, invalidMappingError("invalid agent id")
+	if _, err := uuid.Parse(actorID); err != nil {
+		return nil, invalidMappingError("invalid actor id")
 	}
 
-	return &alkemio.IdentityMapping{UserID: userID, AgentID: agentID}, nil
+	return &alkemio.IdentityMapping{ActorID: actorID}, nil
 }
 
 func invalidMappingError(reason string) error {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -23,17 +22,21 @@ const (
 )
 
 func TestIdentityMapperFetchSuccess(t *testing.T) {
-	identity := kratosclient.NewIdentity(testIdentityID, "default", testSchemaURL, map[string]any{
-		"email":        testEmail,
-		"display_name": testDisplayName,
-	})
+	identity := kratosclient.NewIdentity(
+		testIdentityID, "default", testSchemaURL, map[string]any{
+			"email":        testEmail,
+			"display_name": testDisplayName,
+		},
+	)
 	identity.MetadataPublic = map[string]interface{}{
 		"matrix_user_id": "@user:example.com",
 	}
 
-	mapper := NewIdentityMapperWithProvider(func(context.Context, string) (*kratosclient.Identity, *http.Response, error) {
-		return identity, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
-	})
+	mapper := NewIdentityMapperWithProvider(
+		func(context.Context, string) (*kratosclient.Identity, *http.Response, error) {
+			return identity, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+		},
+	)
 
 	profile, err := mapper.Fetch(context.Background(), testIdentityID)
 	require.NoError(t, err)
@@ -49,13 +52,17 @@ func TestIdentityMapperFetchSuccess(t *testing.T) {
 }
 
 func TestIdentityMapperMissingTraits(t *testing.T) {
-	identity := kratosclient.NewIdentity(testIdentityID, "default", testSchemaURL, map[string]any{
-		"display_name": testDisplayName,
-	})
+	identity := kratosclient.NewIdentity(
+		testIdentityID, "default", testSchemaURL, map[string]any{
+			"display_name": testDisplayName,
+		},
+	)
 
-	mapper := NewIdentityMapperWithProvider(func(context.Context, string) (*kratosclient.Identity, *http.Response, error) {
-		return identity, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
-	})
+	mapper := NewIdentityMapperWithProvider(
+		func(context.Context, string) (*kratosclient.Identity, *http.Response, error) {
+			return identity, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+		},
+	)
 
 	profile, err := mapper.Fetch(context.Background(), testIdentityID)
 	require.Nil(t, profile)
@@ -65,17 +72,21 @@ func TestIdentityMapperMissingTraits(t *testing.T) {
 }
 
 func TestIdentityMapperDisplayNameFallbackFromName(t *testing.T) {
-	identity := kratosclient.NewIdentity(testIdentityID, "default", testSchemaURL, map[string]any{
-		"email": testEmail,
-		"name": map[string]any{
-			"first": "Example",
-			"last":  "User",
+	identity := kratosclient.NewIdentity(
+		testIdentityID, "default", testSchemaURL, map[string]any{
+			"email": testEmail,
+			"name": map[string]any{
+				"first": "Example",
+				"last":  "User",
+			},
 		},
-	})
+	)
 
-	mapper := NewIdentityMapperWithProvider(func(context.Context, string) (*kratosclient.Identity, *http.Response, error) {
-		return identity, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
-	})
+	mapper := NewIdentityMapperWithProvider(
+		func(context.Context, string) (*kratosclient.Identity, *http.Response, error) {
+			return identity, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+		},
+	)
 
 	profile, err := mapper.Fetch(context.Background(), testIdentityID)
 	require.NoError(t, err)
@@ -83,14 +94,18 @@ func TestIdentityMapperDisplayNameFallbackFromName(t *testing.T) {
 }
 
 func TestIdentityMapperInvalidEmail(t *testing.T) {
-	identity := kratosclient.NewIdentity(testIdentityID, "default", testSchemaURL, map[string]any{
-		"email":        "not-an-email",
-		"display_name": testDisplayName,
-	})
+	identity := kratosclient.NewIdentity(
+		testIdentityID, "default", testSchemaURL, map[string]any{
+			"email":        "not-an-email",
+			"display_name": testDisplayName,
+		},
+	)
 
-	mapper := NewIdentityMapperWithProvider(func(context.Context, string) (*kratosclient.Identity, *http.Response, error) {
-		return identity, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
-	})
+	mapper := NewIdentityMapperWithProvider(
+		func(context.Context, string) (*kratosclient.Identity, *http.Response, error) {
+			return identity, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+		},
+	)
 
 	_, err := mapper.Fetch(context.Background(), testIdentityID)
 	var missingErr *MissingTraitsError
@@ -99,9 +114,11 @@ func TestIdentityMapperInvalidEmail(t *testing.T) {
 }
 
 func TestIdentityMapperIdentityNotFound(t *testing.T) {
-	mapper := NewIdentityMapperWithProvider(func(context.Context, string) (*kratosclient.Identity, *http.Response, error) {
-		return nil, &http.Response{StatusCode: http.StatusNotFound, Body: http.NoBody}, errors.New("not found")
-	})
+	mapper := NewIdentityMapperWithProvider(
+		func(context.Context, string) (*kratosclient.Identity, *http.Response, error) {
+			return nil, &http.Response{StatusCode: http.StatusNotFound, Body: http.NoBody}, errors.New("not found")
+		},
+	)
 
 	_, err := mapper.Fetch(context.Background(), "missing-id")
 	var notFoundErr *IdentityNotFoundError
@@ -111,9 +128,11 @@ func TestIdentityMapperIdentityNotFound(t *testing.T) {
 
 func TestIdentityMapperLookupFailure(t *testing.T) {
 	lookupErr := errors.New("boom")
-	mapper := NewIdentityMapperWithProvider(func(context.Context, string) (*kratosclient.Identity, *http.Response, error) {
-		return nil, &http.Response{StatusCode: http.StatusInternalServerError, Body: http.NoBody}, lookupErr
-	})
+	mapper := NewIdentityMapperWithProvider(
+		func(context.Context, string) (*kratosclient.Identity, *http.Response, error) {
+			return nil, &http.Response{StatusCode: http.StatusInternalServerError, Body: http.NoBody}, lookupErr
+		},
+	)
 
 	_, err := mapper.Fetch(context.Background(), testIdentityID)
 	var wrapped *IdentityLookupError
@@ -122,50 +141,31 @@ func TestIdentityMapperLookupFailure(t *testing.T) {
 }
 
 func TestValidateAlkemioMappingSuccess(t *testing.T) {
-	userID := uuid.NewString()
-	agentID := uuid.NewString()
+	actorID := uuid.NewString()
 	mapping := &alkemio.IdentityMapping{
-		UserID:  "  " + userID + "  ",
-		AgentID: "\t" + agentID,
+		ActorID: "  " + actorID + "  ",
 	}
 
 	validated, err := validateAlkemioMapping(mapping)
 	require.NoError(t, err)
 	require.NotSame(t, mapping, validated)
-	require.Equal(t, userID, validated.UserID)
-	require.Equal(t, agentID, validated.AgentID)
+	require.Equal(t, actorID, validated.ActorID)
 }
 
-func TestValidateAlkemioMappingMissingAgent(t *testing.T) {
-	mapping := &alkemio.IdentityMapping{UserID: uuid.NewString()}
+func TestValidateAlkemioMappingMissingActorID(t *testing.T) {
+	mapping := &alkemio.IdentityMapping{}
 
 	_, err := validateAlkemioMapping(mapping)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "missing agent id")
+	require.ErrorContains(t, err, "missing actor id")
 }
 
-func TestValidateAlkemioMappingInvalidAgent(t *testing.T) {
-	mapping := &alkemio.IdentityMapping{UserID: uuid.NewString(), AgentID: "not-a-uuid"}
+func TestValidateAlkemioMappingInvalidActorID(t *testing.T) {
+	mapping := &alkemio.IdentityMapping{ActorID: "not-a-uuid"}
 
 	_, err := validateAlkemioMapping(mapping)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "invalid agent id")
-}
-
-func TestValidateAlkemioMappingMissingUser(t *testing.T) {
-	mapping := &alkemio.IdentityMapping{AgentID: uuid.NewString()}
-
-	_, err := validateAlkemioMapping(mapping)
-	require.Error(t, err)
-	require.ErrorContains(t, err, "missing user id")
-}
-
-func TestValidateAlkemioMappingInvalidUser(t *testing.T) {
-	mapping := &alkemio.IdentityMapping{UserID: strings.Repeat("a", 5), AgentID: uuid.NewString()}
-
-	_, err := validateAlkemioMapping(mapping)
-	require.Error(t, err)
-	require.ErrorContains(t, err, "invalid user id")
+	require.ErrorContains(t, err, "invalid actor id")
 }
 
 func TestValidateAlkemioMappingMissingPayload(t *testing.T) {

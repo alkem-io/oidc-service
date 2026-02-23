@@ -45,8 +45,7 @@ func TestCompositeResolver_DBHit(t *testing.T) {
 // the API resolver is called as fallback (T014).
 func TestCompositeResolver_DBMiss(t *testing.T) {
 	apiMapping := &alkemio.IdentityMapping{
-		UserID:  uuid.New().String(),
-		AgentID: uuid.New().String(),
+		ActorID: uuid.New().String(),
 	}
 
 	mockDB := &mockResolver{err: alkemio.ErrDBNotFound}
@@ -55,11 +54,13 @@ func TestCompositeResolver_DBMiss(t *testing.T) {
 	core, logs := observer.New(zap.DebugLevel)
 	logger := zap.New(core)
 
-	composite, err := alkemio.NewCompositeResolver(alkemio.CompositeConfig{
-		Database: mockDB,
-		API:      mockAPI,
-		Logger:   logger,
-	})
+	composite, err := alkemio.NewCompositeResolver(
+		alkemio.CompositeConfig{
+			Database: mockDB,
+			API:      mockAPI,
+			Logger:   logger,
+		},
+	)
 	if err != nil {
 		t.Fatalf("failed to create composite resolver: %v", err)
 	}
@@ -76,7 +77,7 @@ func TestCompositeResolver_DBMiss(t *testing.T) {
 		t.Fatal("expected result, got nil")
 	}
 
-	if result.UserID != apiMapping.UserID || result.AgentID != apiMapping.AgentID {
+	if result.ActorID != apiMapping.ActorID {
 		t.Errorf("expected mapping %+v, got %+v", apiMapping, result)
 	}
 
@@ -100,8 +101,7 @@ func TestCompositeResolver_DBMiss(t *testing.T) {
 // the API resolver is called and a warning is logged (T017).
 func TestCompositeResolver_DBError(t *testing.T) {
 	apiMapping := &alkemio.IdentityMapping{
-		UserID:  uuid.New().String(),
-		AgentID: uuid.New().String(),
+		ActorID: uuid.New().String(),
 	}
 
 	dbError := errors.New("database connection failed")
@@ -111,11 +111,13 @@ func TestCompositeResolver_DBError(t *testing.T) {
 	core, logs := observer.New(zap.DebugLevel)
 	logger := zap.New(core)
 
-	composite, err := alkemio.NewCompositeResolver(alkemio.CompositeConfig{
-		Database: mockDB,
-		API:      mockAPI,
-		Logger:   logger,
-	})
+	composite, err := alkemio.NewCompositeResolver(
+		alkemio.CompositeConfig{
+			Database: mockDB,
+			API:      mockAPI,
+			Logger:   logger,
+		},
+	)
 	if err != nil {
 		t.Fatalf("failed to create composite resolver: %v", err)
 	}
@@ -132,7 +134,7 @@ func TestCompositeResolver_DBError(t *testing.T) {
 		t.Fatal("expected result, got nil")
 	}
 
-	if result.UserID != apiMapping.UserID || result.AgentID != apiMapping.AgentID {
+	if result.ActorID != apiMapping.ActorID {
 		t.Errorf("expected mapping %+v, got %+v", apiMapping, result)
 	}
 
@@ -166,11 +168,13 @@ func TestDatabaseResolver_InvalidUUID(t *testing.T) {
 
 // TestCompositeResolver_RequiresAPIResolver verifies that API resolver is required.
 func TestCompositeResolver_RequiresAPIResolver(t *testing.T) {
-	_, err := alkemio.NewCompositeResolver(alkemio.CompositeConfig{
-		Database: nil,
-		API:      nil,
-		Logger:   zap.NewNop(),
-	})
+	_, err := alkemio.NewCompositeResolver(
+		alkemio.CompositeConfig{
+			Database: nil,
+			API:      nil,
+			Logger:   zap.NewNop(),
+		},
+	)
 
 	if err == nil {
 		t.Fatal("expected error when API resolver is nil")

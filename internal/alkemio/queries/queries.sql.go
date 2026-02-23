@@ -12,19 +12,14 @@ import (
 )
 
 const getUserByAuthenticationID = `-- name: GetUserByAuthenticationID :one
-SELECT "id", "agentId"
+SELECT "id"
 FROM "user"
 WHERE "authenticationID" = $1
 `
 
-type GetUserByAuthenticationIDRow struct {
-	ID      pgtype.UUID
-	AgentId pgtype.UUID
-}
-
-func (q *Queries) GetUserByAuthenticationID(ctx context.Context, authenticationid pgtype.UUID) (GetUserByAuthenticationIDRow, error) {
+func (q *Queries) GetUserByAuthenticationID(ctx context.Context, authenticationid pgtype.UUID) (pgtype.UUID, error) {
 	row := q.db.QueryRow(ctx, getUserByAuthenticationID, authenticationid)
-	var i GetUserByAuthenticationIDRow
-	err := row.Scan(&i.ID, &i.AgentId)
-	return i, err
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
 }

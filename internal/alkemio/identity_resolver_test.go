@@ -13,10 +13,8 @@ import (
 
 const (
 	validKratosID     = "a30b6fbc-04a3-4ff7-8db0-94589f5cb918"
-	validUserID       = "ec1c8293-8b91-4de0-9033-9c7de3b5a963"
-	validAgentID      = "6f4ed2d2-0ad0-4b83-8d43-8d9b9b4970b3"
-	altValidUserID    = "02d7c369-99d9-4a33-83ba-6df2a4bfb7c8"
-	altValidAgentID   = "3547bbca-54de-4d64-926d-e5dd51e8e37d"
+	validActorID      = "ec1c8293-8b91-4de0-9033-9c7de3b5a963"
+	altValidActorID   = "02d7c369-99d9-4a33-83ba-6df2a4bfb7c8"
 	invalidUUIDText   = "not-a-uuid"
 	headerContentType = "Content-Type"
 	contentTypeJSON   = "application/json"
@@ -27,24 +25,30 @@ const (
 func TestResolveSuccess(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var payload map[string]string
-		_ = json.NewDecoder(r.Body).Decode(&payload)
-		if payload["authenticationId"] != validKratosID {
-			t.Fatalf("unexpected authentication id %s", payload["authenticationId"])
-		}
-		_ = r.Body.Close()
-		w.Header().Set(headerContentType, contentTypeJSON)
-		_ = json.NewEncoder(w).Encode(map[string]string{"userId": validUserID, "agentId": validAgentID})
-	}))
+	server := httptest.NewServer(
+		http.HandlerFunc(
+			func(w http.ResponseWriter, r *http.Request) {
+				var payload map[string]string
+				_ = json.NewDecoder(r.Body).Decode(&payload)
+				if payload["authenticationId"] != validKratosID {
+					t.Fatalf("unexpected authentication id %s", payload["authenticationId"])
+				}
+				_ = r.Body.Close()
+				w.Header().Set(headerContentType, contentTypeJSON)
+				_ = json.NewEncoder(w).Encode(map[string]string{"userId": validActorID, "actorID": validActorID})
+			},
+		),
+	)
 	defer server.Close()
 
-	resolver, err := NewIdentityResolver(Config{
-		BaseURL:     server.URL,
-		ResolvePath: "/rest/internal/identity/resolve",
-		Timeout:     time.Second,
-		MaxRetries:  3,
-	})
+	resolver, err := NewIdentityResolver(
+		Config{
+			BaseURL:     server.URL,
+			ResolvePath: "/rest/internal/identity/resolve",
+			Timeout:     time.Second,
+			MaxRetries:  3,
+		},
+	)
 	if err != nil {
 		t.Fatalf(errFmtNewResolver, err)
 	}
@@ -54,11 +58,8 @@ func TestResolveSuccess(t *testing.T) {
 		t.Fatalf("resolve: %v", err)
 	}
 
-	if mapping.UserID != validUserID {
-		t.Fatalf("unexpected user id %s", mapping.UserID)
-	}
-	if mapping.AgentID != validAgentID {
-		t.Fatalf("unexpected agent id %s", mapping.AgentID)
+	if mapping.ActorID != validActorID {
+		t.Fatalf("unexpected actor id %s", mapping.ActorID)
 	}
 }
 
@@ -66,10 +67,14 @@ func TestResolveNotFound(t *testing.T) {
 	t.Parallel()
 
 	attempts := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		attempts++
-		w.WriteHeader(http.StatusNotFound)
-	}))
+	server := httptest.NewServer(
+		http.HandlerFunc(
+			func(w http.ResponseWriter, _ *http.Request) {
+				attempts++
+				w.WriteHeader(http.StatusNotFound)
+			},
+		),
+	)
 	defer server.Close()
 
 	resolver, err := NewIdentityResolver(Config{BaseURL: server.URL, ResolvePath: "/", Timeout: time.Second, MaxRetries: 3})
@@ -93,15 +98,19 @@ func TestResolveRetriesOnServerError(t *testing.T) {
 	t.Parallel()
 
 	attempts := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		attempts++
-		if attempts < 3 {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set(headerContentType, contentTypeJSON)
-		_ = json.NewEncoder(w).Encode(map[string]string{"userId": altValidUserID, "agentId": altValidAgentID})
-	}))
+	server := httptest.NewServer(
+		http.HandlerFunc(
+			func(w http.ResponseWriter, _ *http.Request) {
+				attempts++
+				if attempts < 3 {
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+				w.Header().Set(headerContentType, contentTypeJSON)
+				_ = json.NewEncoder(w).Encode(map[string]string{"userId": altValidActorID, "actorID": altValidActorID})
+			},
+		),
+	)
 	defer server.Close()
 
 	resolver, err := NewIdentityResolver(Config{BaseURL: server.URL, ResolvePath: "/", Timeout: 2 * time.Second, MaxRetries: 3})
@@ -113,11 +122,8 @@ func TestResolveRetriesOnServerError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if mapping.UserID != altValidUserID {
-		t.Fatalf("unexpected user id %s", mapping.UserID)
-	}
-	if mapping.AgentID != altValidAgentID {
-		t.Fatalf("unexpected agent id %s", mapping.AgentID)
+	if mapping.ActorID != altValidActorID {
+		t.Fatalf("unexpected actor id %s", mapping.ActorID)
 	}
 	if attempts != 3 {
 		t.Fatalf("expected 3 attempts, got %d", attempts)
@@ -127,9 +133,13 @@ func TestResolveRetriesOnServerError(t *testing.T) {
 func TestResolveFailsAfterExhaustingRetries(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusServiceUnavailable)
-	}))
+	server := httptest.NewServer(
+		http.HandlerFunc(
+			func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusServiceUnavailable)
+			},
+		),
+	)
 	defer server.Close()
 
 	resolver, err := NewIdentityResolver(Config{BaseURL: server.URL, ResolvePath: "/", Timeout: time.Second, MaxRetries: 2})
@@ -146,10 +156,14 @@ func TestResolveFailsAfterExhaustingRetries(t *testing.T) {
 func TestResolveHonorsContextCancellation(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		time.Sleep(50 * time.Millisecond)
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
+	server := httptest.NewServer(
+		http.HandlerFunc(
+			func(w http.ResponseWriter, _ *http.Request) {
+				time.Sleep(50 * time.Millisecond)
+				w.WriteHeader(http.StatusInternalServerError)
+			},
+		),
+	)
 	defer server.Close()
 
 	resolver, err := NewIdentityResolver(Config{BaseURL: server.URL, ResolvePath: "/", Timeout: 500 * time.Millisecond, MaxRetries: 5})
@@ -175,17 +189,23 @@ func TestNewIdentityResolverRequiresBaseURL(t *testing.T) {
 func TestResolveTimesOut(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
-		time.Sleep(100 * time.Millisecond)
-	}))
+	server := httptest.NewServer(
+		http.HandlerFunc(
+			func(_ http.ResponseWriter, _ *http.Request) {
+				time.Sleep(100 * time.Millisecond)
+			},
+		),
+	)
 	defer server.Close()
 
-	resolver, err := NewIdentityResolver(Config{
-		BaseURL:     server.URL,
-		ResolvePath: "/",
-		Timeout:     20 * time.Millisecond,
-		MaxRetries:  1,
-	})
+	resolver, err := NewIdentityResolver(
+		Config{
+			BaseURL:     server.URL,
+			ResolvePath: "/",
+			Timeout:     20 * time.Millisecond,
+			MaxRetries:  1,
+		},
+	)
 	if err != nil {
 		t.Fatalf(errFmtNewResolver, err)
 	}
@@ -200,11 +220,13 @@ func TestResolveTimesOut(t *testing.T) {
 }
 
 func TestResolveRejectsInvalidAuthenticationID(t *testing.T) {
-	resolver, err := NewIdentityResolver(Config{
-		BaseURL:     "http://example.com",
-		ResolvePath: "/",
-		Timeout:     time.Second,
-	})
+	resolver, err := NewIdentityResolver(
+		Config{
+			BaseURL:     "http://example.com",
+			ResolvePath: "/",
+			Timeout:     time.Second,
+		},
+	)
 	if err != nil {
 		t.Fatalf(errFmtNewResolver, err)
 	}
@@ -218,86 +240,105 @@ func TestResolveRejectsInvalidAuthenticationID(t *testing.T) {
 	}
 }
 
-func TestResolveFailsWhenResponseUserIDIsNotUUID(t *testing.T) {
+func TestResolveFailsWhenResponseActorIDIsInvalid(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set(headerContentType, contentTypeJSON)
-		_ = json.NewEncoder(w).Encode(map[string]string{"userId": invalidUUIDText, "agentId": validAgentID})
-	}))
+	server := httptest.NewServer(
+		http.HandlerFunc(
+			func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set(headerContentType, contentTypeJSON)
+				_ = json.NewEncoder(w).Encode(map[string]string{"userId": invalidUUIDText, "actorID": invalidUUIDText})
+			},
+		),
+	)
 	defer server.Close()
 
-	resolver, err := NewIdentityResolver(Config{
-		BaseURL:     server.URL,
-		ResolvePath: "/",
-		Timeout:     time.Second,
-		MaxRetries:  1,
-	})
+	resolver, err := NewIdentityResolver(
+		Config{
+			BaseURL:     server.URL,
+			ResolvePath: "/",
+			Timeout:     time.Second,
+			MaxRetries:  1,
+		},
+	)
 	if err != nil {
 		t.Fatalf(errFmtNewResolver, err)
 	}
 
 	_, err = resolver.Resolve(context.Background(), validKratosID)
 	if err == nil {
-		t.Fatalf("expected error for invalid userId")
+		t.Fatalf("expected error for invalid actorID")
 	}
-	if !strings.Contains(err.Error(), "userId must be a valid uuid") {
+	if !strings.Contains(err.Error(), "actorID must be a valid uuid") {
 		t.Fatalf(errFmtUnexpected, err)
 	}
 }
 
-func TestResolveFailsWhenResponseAgentIDIsInvalid(t *testing.T) {
+func TestResolveFailsWhenActorIDMissing(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set(headerContentType, contentTypeJSON)
-		_ = json.NewEncoder(w).Encode(map[string]string{"userId": validUserID, "agentId": invalidUUIDText})
-	}))
+	server := httptest.NewServer(
+		http.HandlerFunc(
+			func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set(headerContentType, contentTypeJSON)
+				_ = json.NewEncoder(w).Encode(map[string]string{})
+			},
+		),
+	)
 	defer server.Close()
 
-	resolver, err := NewIdentityResolver(Config{
-		BaseURL:     server.URL,
-		ResolvePath: "/",
-		Timeout:     time.Second,
-		MaxRetries:  1,
-	})
+	resolver, err := NewIdentityResolver(
+		Config{
+			BaseURL:     server.URL,
+			ResolvePath: "/",
+			Timeout:     time.Second,
+			MaxRetries:  1,
+		},
+	)
 	if err != nil {
 		t.Fatalf(errFmtNewResolver, err)
 	}
 
 	_, err = resolver.Resolve(context.Background(), validKratosID)
 	if err == nil {
-		t.Fatalf("expected error for invalid agentId")
+		t.Fatalf("expected error for missing actorID")
 	}
-	if !strings.Contains(err.Error(), "agentId must be a valid uuid") {
+	if !strings.Contains(err.Error(), "missing actorID") {
 		t.Fatalf(errFmtUnexpected, err)
 	}
 }
 
-func TestResolveFailsWhenAgentIDMissing(t *testing.T) {
+func TestResolveFallsBackToUserID(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set(headerContentType, contentTypeJSON)
-		_ = json.NewEncoder(w).Encode(map[string]string{"userId": validUserID})
-	}))
+	// Simulate older server that only returns userId (no actorID field).
+	server := httptest.NewServer(
+		http.HandlerFunc(
+			func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set(headerContentType, contentTypeJSON)
+				_ = json.NewEncoder(w).Encode(map[string]string{"userId": validActorID})
+			},
+		),
+	)
 	defer server.Close()
 
-	resolver, err := NewIdentityResolver(Config{
-		BaseURL:     server.URL,
-		ResolvePath: "/",
-		Timeout:     time.Second,
-		MaxRetries:  1,
-	})
+	resolver, err := NewIdentityResolver(
+		Config{
+			BaseURL:     server.URL,
+			ResolvePath: "/",
+			Timeout:     time.Second,
+			MaxRetries:  1,
+		},
+	)
 	if err != nil {
 		t.Fatalf(errFmtNewResolver, err)
 	}
 
-	_, err = resolver.Resolve(context.Background(), validKratosID)
-	if err == nil {
-		t.Fatalf("expected error for missing agentId")
+	mapping, err := resolver.Resolve(context.Background(), validKratosID)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
 	}
-	if !strings.Contains(err.Error(), "missing agentId") {
-		t.Fatalf(errFmtUnexpected, err)
+	if mapping.ActorID != validActorID {
+		t.Fatalf("unexpected actor id %s", mapping.ActorID)
 	}
 }

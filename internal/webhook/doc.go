@@ -1,7 +1,7 @@
 // Package webhook provides HTTP handlers for Kratos webhook integrations.
 //
 // The primary endpoint is POST /webhooks/kratos/post-login which resolves
-// Alkemio identity claims (alkemio_actor_id, alkemio_agent_id) for a given
+// Alkemio identity claims (alkemio_actor_id, alkemio_user_id) for a given
 // Kratos identity and stores them in identity.metadata_public via the Kratos
 // Admin API (PATCH /admin/identities/{id}).
 //

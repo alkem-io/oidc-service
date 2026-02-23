@@ -19,7 +19,6 @@ import (
 const (
 	testIdentityID = "8c0b7f5a-4dce-4d13-b6ad-6b2df2c1d10c"
 	testActorID    = "1bcf5bd1-5f3e-4f01-9125-0edc93e5f5b1"
-	testAgentID    = "6f4ed2d2-0ad0-4b83-8d43-8d9b9b4970b3"
 )
 
 type resolverStub struct {
@@ -45,17 +44,21 @@ func (s kratosAdminStub) PatchIdentity(ctx context.Context, identityID string, p
 }
 
 func TestNewHandlerRequiresResolver(t *testing.T) {
-	_, err := NewHandler(HandlerConfig{
-		Kratos: kratosAdminStub{},
-	})
+	_, err := NewHandler(
+		HandlerConfig{
+			Kratos: kratosAdminStub{},
+		},
+	)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "resolver is required")
 }
 
 func TestNewHandlerRequiresKratos(t *testing.T) {
-	_, err := NewHandler(HandlerConfig{
-		Resolver: resolverStub{},
-	})
+	_, err := NewHandler(
+		HandlerConfig{
+			Resolver: resolverStub{},
+		},
+	)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "kratos admin client is required")
 }
@@ -70,8 +73,7 @@ func TestPostLoginSuccess(t *testing.T) {
 		resolve: func(_ context.Context, authenticationID string) (*alkemio.IdentityMapping, error) {
 			require.Equal(t, testIdentityID, authenticationID)
 			return &alkemio.IdentityMapping{
-				UserID:  testActorID,
-				AgentID: testAgentID,
+				ActorID: testActorID,
 			}, nil
 		},
 	}
@@ -89,11 +91,13 @@ func TestPostLoginSuccess(t *testing.T) {
 		},
 	}
 
-	handler, err := NewHandler(HandlerConfig{
-		Resolver: resolverStub,
-		Kratos:   kratosStub,
-		Logger:   zap.NewNop(),
-	})
+	handler, err := NewHandler(
+		HandlerConfig{
+			Resolver: resolverStub,
+			Kratos:   kratosStub,
+			Logger:   zap.NewNop(),
+		},
+	)
 	require.NoError(t, err)
 
 	body := `{"identity_id":"` + testIdentityID + `"}`
@@ -106,15 +110,14 @@ func TestPostLoginSuccess(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, testIdentityID, patchedIdentityID)
 	require.Equal(t, testActorID, patchedValue["alkemio_actor_id"])
-	require.Equal(t, testAgentID, patchedValue["alkemio_agent_id"])
+	require.Equal(t, testActorID, patchedValue["alkemio_user_id"])
 }
 
 func TestPostLoginPatchFailureReturns500(t *testing.T) {
 	resolverStub := resolverStub{
 		resolve: func(_ context.Context, _ string) (*alkemio.IdentityMapping, error) {
 			return &alkemio.IdentityMapping{
-				UserID:  testActorID,
-				AgentID: testAgentID,
+				ActorID: testActorID,
 			}, nil
 		},
 	}
@@ -125,11 +128,13 @@ func TestPostLoginPatchFailureReturns500(t *testing.T) {
 		},
 	}
 
-	handler, err := NewHandler(HandlerConfig{
-		Resolver: resolverStub,
-		Kratos:   kratosStub,
-		Logger:   zap.NewNop(),
-	})
+	handler, err := NewHandler(
+		HandlerConfig{
+			Resolver: resolverStub,
+			Kratos:   kratosStub,
+			Logger:   zap.NewNop(),
+		},
+	)
 	require.NoError(t, err)
 
 	body := `{"identity_id":"` + testIdentityID + `"}`
@@ -161,11 +166,13 @@ func TestPostLoginResolverErrorReturns500(t *testing.T) {
 		},
 	}
 
-	handler, err := NewHandler(HandlerConfig{
-		Resolver: resolverStub,
-		Kratos:   kratosStub,
-		Logger:   zap.NewNop(),
-	})
+	handler, err := NewHandler(
+		HandlerConfig{
+			Resolver: resolverStub,
+			Kratos:   kratosStub,
+			Logger:   zap.NewNop(),
+		},
+	)
 	require.NoError(t, err)
 
 	body := `{"identity_id":"` + testIdentityID + `"}`
@@ -197,11 +204,13 @@ func TestPostLoginNotFoundReturns404(t *testing.T) {
 		},
 	}
 
-	handler, err := NewHandler(HandlerConfig{
-		Resolver: resolverStub,
-		Kratos:   kratosStub,
-		Logger:   zap.NewNop(),
-	})
+	handler, err := NewHandler(
+		HandlerConfig{
+			Resolver: resolverStub,
+			Kratos:   kratosStub,
+			Logger:   zap.NewNop(),
+		},
+	)
 	require.NoError(t, err)
 
 	body := `{"identity_id":"` + testIdentityID + `"}`
@@ -226,11 +235,13 @@ func TestPostLoginTimeoutReturns500(t *testing.T) {
 		},
 	}
 
-	handler, err := NewHandler(HandlerConfig{
-		Resolver: resolverStub,
-		Kratos:   kratosAdminStub{},
-		Logger:   zap.NewNop(),
-	})
+	handler, err := NewHandler(
+		HandlerConfig{
+			Resolver: resolverStub,
+			Kratos:   kratosAdminStub{},
+			Logger:   zap.NewNop(),
+		},
+	)
 	require.NoError(t, err)
 
 	body := `{"identity_id":"` + testIdentityID + `"}`
@@ -249,11 +260,13 @@ func TestPostLoginTimeoutReturns500(t *testing.T) {
 }
 
 func TestPostLoginMalformedJSONReturns400(t *testing.T) {
-	handler, err := NewHandler(HandlerConfig{
-		Resolver: resolverStub{},
-		Kratos:   kratosAdminStub{},
-		Logger:   zap.NewNop(),
-	})
+	handler, err := NewHandler(
+		HandlerConfig{
+			Resolver: resolverStub{},
+			Kratos:   kratosAdminStub{},
+			Logger:   zap.NewNop(),
+		},
+	)
 	require.NoError(t, err)
 
 	body := `{not valid json}`
@@ -279,11 +292,13 @@ func TestPostLoginMissingIdentityIDReturns400(t *testing.T) {
 		},
 	}
 
-	handler, err := NewHandler(HandlerConfig{
-		Resolver: resolverStub,
-		Kratos:   kratosAdminStub{},
-		Logger:   zap.NewNop(),
-	})
+	handler, err := NewHandler(
+		HandlerConfig{
+			Resolver: resolverStub,
+			Kratos:   kratosAdminStub{},
+			Logger:   zap.NewNop(),
+		},
+	)
 	require.NoError(t, err)
 
 	body := `{}`

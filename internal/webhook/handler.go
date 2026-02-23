@@ -107,14 +107,15 @@ func (h *Handler) PostLogin(w http.ResponseWriter, r *http.Request) {
 			Op:   "add",
 			Path: "/metadata_public",
 			Value: map[string]interface{}{
-				"alkemio_actor_id": mapping.UserID,
-				"alkemio_agent_id": mapping.AgentID,
+				"alkemio_actor_id": mapping.ActorID,
+				"alkemio_user_id":  mapping.ActorID, // backward-compat: same value
 			},
 		},
 	}
 
 	if err := h.kratos.PatchIdentity(ctx, identityID, patches); err != nil {
-		logger.Error("failed to patch identity metadata",
+		logger.Error(
+			"failed to patch identity metadata",
 			zap.String("identity_id", maskID(identityID)),
 			zap.Error(err),
 		)
@@ -122,10 +123,10 @@ func (h *Handler) PostLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.Info("patched identity metadata",
+	logger.Info(
+		"patched identity metadata",
 		zap.String("identity_id", maskID(identityID)),
-		zap.String("actor_id", maskID(mapping.UserID)),
-		zap.String("agent_id", maskID(mapping.AgentID)),
+		zap.String("actor_id", maskID(mapping.ActorID)),
 	)
 
 	// Return empty success response (Kratos doesn't parse this for login)
@@ -156,13 +157,15 @@ func (h *Handler) resolveIdentity(ctx context.Context, r *http.Request) (string,
 		}
 	}
 
-	logger.Debug("processing webhook request",
+	logger.Debug(
+		"processing webhook request",
 		zap.String("identity_id", maskID(identityID)),
 	)
 
 	mapping, err := h.resolver.Resolve(ctx, identityID)
 	if err != nil {
-		logger.Error("failed to resolve alkemio identity",
+		logger.Error(
+			"failed to resolve alkemio identity",
 			zap.String("identity_id", maskID(identityID)),
 			zap.String("error_type", classifyError(err)),
 			zap.Error(err),
@@ -183,7 +186,8 @@ func (h *Handler) resolveIdentity(ctx context.Context, r *http.Request) (string,
 	}
 
 	if err := h.validateMapping(mapping); err != nil {
-		logger.Error("resolved mapping has invalid UUIDs",
+		logger.Error(
+			"resolved mapping has invalid UUIDs",
 			zap.String("identity_id", maskID(identityID)),
 			zap.Error(err),
 		)
@@ -202,12 +206,8 @@ func (h *Handler) validateMapping(mapping *alkemio.IdentityMapping) error {
 		return &ValidationError{Field: "mapping", Message: "mapping is nil"}
 	}
 
-	if _, err := uuid.Parse(mapping.UserID); err != nil {
+	if _, err := uuid.Parse(mapping.ActorID); err != nil {
 		return &ValidationError{Field: "actor_id", Message: "invalid UUID format"}
-	}
-
-	if _, err := uuid.Parse(mapping.AgentID); err != nil {
-		return &ValidationError{Field: "agent_id", Message: "invalid UUID format"}
 	}
 
 	return nil
@@ -254,10 +254,12 @@ func (h *Handler) writeJSON(ctx context.Context, w http.ResponseWriter, status i
 }
 
 func (h *Handler) writeError(ctx context.Context, w http.ResponseWriter, status int, code, message string) {
-	h.writeJSON(ctx, w, status, ErrorResponse{
-		Error:   code,
-		Message: message,
-	})
+	h.writeJSON(
+		ctx, w, status, ErrorResponse{
+			Error:   code,
+			Message: message,
+		},
+	)
 }
 
 func maskID(id string) string {

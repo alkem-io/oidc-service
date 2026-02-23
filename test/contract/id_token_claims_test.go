@@ -20,10 +20,12 @@ import (
 )
 
 func newIDTokenRouter() http.Handler {
-	return server.NewRouter(server.Options{
-		Logger:      zap.NewNop(),
-		Maintenance: maintenance.NewState(config.MaintenanceState{}),
-	})
+	return server.NewRouter(
+		server.Options{
+			Logger:      zap.NewNop(),
+			Maintenance: maintenance.NewState(config.MaintenanceState{}),
+		},
+	)
 }
 
 // TestIDTokenClaimsContract validates that consent endpoint properly handles
@@ -52,27 +54,29 @@ func TestIDTokenClaimsContract(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			router := newIDTokenRouter()
+		t.Run(
+			tc.name, func(t *testing.T) {
+				router := newIDTokenRouter()
 
-			req := httptest.NewRequest(http.MethodGet, "/v1/oidc/consent?consent_challenge="+tc.challengeID, nil)
-			rec := httptest.NewRecorder()
+				req := httptest.NewRequest(http.MethodGet, "/v1/oidc/consent?consent_challenge="+tc.challengeID, nil)
+				rec := httptest.NewRecorder()
 
-			router.ServeHTTP(rec, req)
+				router.ServeHTTP(rec, req)
 
-			if rec.Code != http.StatusFound {
-				t.Fatalf("%s: expected status %d, got %d", tc.description, http.StatusFound, rec.Code)
-			}
+				if rec.Code != http.StatusFound {
+					t.Fatalf("%s: expected status %d, got %d", tc.description, http.StatusFound, rec.Code)
+				}
 
-			testsupport.AssertStubRedirect(t, rec.Header().Get("Location"), "consent", tc.challengeID)
-		})
+				testsupport.AssertStubRedirect(t, rec.Header().Get("Location"), "consent", tc.challengeID)
+			},
+		)
 	}
 }
 
-func TestIDTokenClaimsIncludeAgentID(t *testing.T) {
+func TestIDTokenClaimsIncludeActorID(t *testing.T) {
 	t.Parallel()
 
-	const challengeID = "id-token-agent-claims"
+	const challengeID = "id-token-actor-claims"
 	consent := hydraAdmin.NewOAuth2ConsentRequest(challengeID)
 	consent.SetSubject(contractKratosID)
 	consent.SetContext(map[string]any{"identity_id": contractKratosID})
@@ -80,11 +84,15 @@ func TestIDTokenClaimsIncludeAgentID(t *testing.T) {
 	var capturedID map[string]any
 
 	hydraStub := &testsupport.HydraClientStub{
-		GetConsentFunc: func(_ context.Context, requested string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
+		GetConsentFunc: func(_ context.Context, requested string) (
+			*hydraAdmin.OAuth2ConsentRequest, *http.Response, error,
+		) {
 			require.Equal(t, challengeID, requested)
 			return consent, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 		},
-		AcceptConsentFunc: func(_ context.Context, requested string, body *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
+		AcceptConsentFunc: func(
+			_ context.Context, requested string, body *hydraAdmin.AcceptOAuth2ConsentRequest,
+		) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
 			require.Equal(t, challengeID, requested)
 			session := body.GetSession()
 			if claims, ok := session.GetIdToken().(map[string]any); ok {
@@ -104,7 +112,7 @@ func TestIDTokenClaimsIncludeAgentID(t *testing.T) {
 	resolverStub := testsupport.AlkemioResolverStub{
 		ResolveFunc: func(_ context.Context, authenticationID string) (*alkemio.IdentityMapping, error) {
 			require.Equal(t, contractKratosID, authenticationID)
-			return testsupport.NewAlkemioMapping(contractUserID, contractAgentID), nil
+			return testsupport.NewAlkemioMapping(contractUserID), nil
 		},
 	}
 
@@ -114,5 +122,5 @@ func TestIDTokenClaimsIncludeAgentID(t *testing.T) {
 	_, err = svc.ResolveConsent(context.Background(), challengeID)
 	require.NoError(t, err)
 	require.NotNil(t, capturedID, "id token claims not captured")
-	require.Equal(t, contractAgentID, capturedID["agent_id"])
+	require.Equal(t, contractUserID, capturedID["alkemio_actor_id"])
 }

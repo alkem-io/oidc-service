@@ -32,8 +32,8 @@ func TestExtractTokenClaims(identity *kratosclient.Identity) *TokenClaims {
 }
 
 // TestAlkemioMapping constructs an identity mapping for resolver-focused tests.
-func TestAlkemioMapping(userID, agentID string) *alkemio.IdentityMapping {
-	return &alkemio.IdentityMapping{UserID: userID, AgentID: agentID}
+func TestAlkemioMapping(actorID string) *alkemio.IdentityMapping {
+	return &alkemio.IdentityMapping{ActorID: actorID}
 }
 
 // TestValidateAlkemioMapping exposes validateAlkemioMapping for unit tests.

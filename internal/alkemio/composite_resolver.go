@@ -9,7 +9,7 @@ import (
 
 // Resolver defines the interface for resolving Alkemio identity mappings.
 type Resolver interface {
-	// Resolve looks up the Alkemio UserID and AgentID for the given authenticationID.
+	// Resolve looks up the Alkemio ActorID for the given authenticationID.
 	Resolve(ctx context.Context, authenticationID string) (*IdentityMapping, error)
 }
 
@@ -55,11 +55,13 @@ func (r *CompositeResolver) Resolve(ctx context.Context, authenticationID string
 		}
 
 		if errors.Is(err, ErrDBNotFound) {
-			r.logger.Debug("identity not found in database, falling back to API",
+			r.logger.Debug(
+				"identity not found in database, falling back to API",
 				zap.String("authentication_id", maskUUID(authenticationID)),
 			)
 		} else {
-			r.logger.Warn("database lookup failed, falling back to API",
+			r.logger.Warn(
+				"database lookup failed, falling back to API",
 				zap.String("authentication_id", maskUUID(authenticationID)),
 				zap.Error(err),
 			)

@@ -18,7 +18,7 @@ type IdentityUpdate struct {
 // MetadataPublic contains Alkemio identity claims.
 type MetadataPublic struct {
 	AlkemioActorID string `json:"alkemio_actor_id"`
-	AlkemioAgentID string `json:"alkemio_agent_id"`
+	AlkemioUserID  string `json:"alkemio_user_id"`
 }
 
 // ErrorResponse represents an error response to Kratos.

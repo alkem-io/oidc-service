@@ -35,13 +35,13 @@ type Config struct {
 	Client      HTTPDoer
 }
 
-// IdentityMapping captures the Alkemio user and agent identifiers associated with a Kratos identity.
+// IdentityMapping captures the Alkemio actor identifier associated with a Kratos identity.
+// ActorID equals user.id which is also the FK to the actor table.
 type IdentityMapping struct {
-	UserID  string
-	AgentID string
+	ActorID string
 }
 
-// IdentityResolver resolves Alkemio user and agent IDs from Kratos authentication IDs.
+// IdentityResolver resolves Alkemio actor IDs from Kratos authentication IDs.
 type IdentityResolver struct {
 	client     HTTPDoer
 	resolveURL string
@@ -191,29 +191,25 @@ func (r *IdentityResolver) resolveOnce(ctx context.Context, authenticationID str
 
 	var payload struct {
 		UserID  string `json:"userId"`
-		AgentID string `json:"agentId"`
+		ActorID string `json:"actorID"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		return nil, &temporaryError{err: fmt.Errorf("decode response: %w", err)}
 	}
 
-	userID := strings.TrimSpace(payload.UserID)
-	if userID == "" {
-		return nil, fmt.Errorf("alkemio response missing userId")
+	// Prefer actorID; fall back to userId for older server versions.
+	actorID := strings.TrimSpace(payload.ActorID)
+	if actorID == "" {
+		actorID = strings.TrimSpace(payload.UserID)
 	}
-	if !isUUID(userID) {
-		return nil, fmt.Errorf("alkemio response userId must be a valid uuid")
+	if actorID == "" {
+		return nil, fmt.Errorf("alkemio response missing actorID")
 	}
-
-	agentID := strings.TrimSpace(payload.AgentID)
-	if agentID == "" {
-		return nil, fmt.Errorf("alkemio response missing agentId")
-	}
-	if !isUUID(agentID) {
-		return nil, fmt.Errorf("alkemio response agentId must be a valid uuid")
+	if !isUUID(actorID) {
+		return nil, fmt.Errorf("alkemio response actorID must be a valid uuid")
 	}
 
-	return &IdentityMapping{UserID: userID, AgentID: agentID}, nil
+	return &IdentityMapping{ActorID: actorID}, nil
 }
 
 func (r *IdentityResolver) wait(ctx context.Context, attempt int) error {

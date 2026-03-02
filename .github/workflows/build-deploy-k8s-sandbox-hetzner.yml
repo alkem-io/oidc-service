@@ -49,14 +49,8 @@ jobs:
             --docker-password=${{ secrets.REGISTRY_PASSWORD }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Deploy manifests
-        uses: azure/k8s-deploy@v5
-        with:
-          manifests: |
-            deployments/kubernetes/configmap.yaml
-            deployments/kubernetes/deployment.yaml
-            deployments/kubernetes/service.yaml
-          images: |
-            ${{ secrets.REGISTRY_LOGIN_SERVER }}/alkemio-oidc-service:${{ github.sha }}
-          imagepullsecrets: |
-            oidc-service-registry
+      - name: Apply configmap and service
+        run: kubectl apply -f deployments/kubernetes/configmap.yaml -f deployments/kubernetes/service.yaml
+
+      - name: Set deployment image
+        run: kubectl set image deployment/oidc-service oidc-service=${{ secrets.REGISTRY_LOGIN_SERVER }}/alkemio-oidc-service:${{ github.sha }}

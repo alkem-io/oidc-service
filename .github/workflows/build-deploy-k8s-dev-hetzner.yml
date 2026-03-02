@@ -53,5 +53,9 @@ jobs:
       - name: Apply configmap and service
         run: kubectl apply -f deployments/kubernetes/configmap.yaml -f deployments/kubernetes/service.yaml
 
+      - name: Patch image pull secret
+        run: |
+          kubectl patch deployment oidc-service -p '{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"oidc-service-registry"}]}}}}'
+
       - name: Set deployment image
         run: kubectl set image deployment/oidc-service oidc-service=${{ secrets.REGISTRY_LOGIN_SERVER }}/alkemio-oidc-service:${{ github.sha }}

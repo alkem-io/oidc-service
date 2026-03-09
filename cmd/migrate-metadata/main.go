@@ -135,6 +135,11 @@ type migrationResult struct {
 	err        error
 }
 
+type failedIdentity struct {
+	id  string
+	err string
+}
+
 func migrate(ctx context.Context, logger *zap.Logger, admin *webhook.KratosAdminClient, resolver *alkemio.CompositeResolver) error {
 	start := time.Now()
 
@@ -156,6 +161,9 @@ func migrate(ctx context.Context, logger *zap.Logger, admin *webhook.KratosAdmin
 	}
 
 	// Collect results in a separate goroutine.
+	var mu sync.Mutex
+	var failures []failedIdentity
+
 	var resultWg sync.WaitGroup
 	resultWg.Add(1)
 	go func() {
@@ -168,9 +176,12 @@ func migrate(ctx context.Context, logger *zap.Logger, admin *webhook.KratosAdmin
 				} else {
 					failed.Add(1)
 					logger.Error("patch failed",
-						zap.String("identity_id", maskID(r.identityID)),
+						zap.String("identity_id", r.identityID),
 						zap.Error(r.err),
 					)
+					mu.Lock()
+					failures = append(failures, failedIdentity{id: r.identityID, err: r.err.Error()})
+					mu.Unlock()
 				}
 			} else {
 				patched.Add(1)
@@ -223,8 +234,15 @@ func migrate(ctx context.Context, logger *zap.Logger, admin *webhook.KratosAdmin
 		zap.Duration("elapsed", time.Since(start)),
 	)
 
-	if f := failed.Load(); f > 0 {
-		return fmt.Errorf("%d identities failed to patch", f)
+	if len(failures) > 0 {
+		logger.Error("failed identities summary")
+		for _, f := range failures {
+			logger.Error("  failed identity",
+				zap.String("identity_id", f.id),
+				zap.String("reason", f.err),
+			)
+		}
+		return fmt.Errorf("%d identities failed to patch", len(failures))
 	}
 
 	return nil

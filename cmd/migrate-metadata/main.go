@@ -9,6 +9,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -90,44 +91,19 @@ type closerFunc func() error
 
 func (f closerFunc) Close() error { return f() }
 
-func newResolver(ctx context.Context, cfg *config.ServiceConfig, logger *zap.Logger) (*alkemio.CompositeResolver, closerFunc, error) {
-	apiResolver, err := alkemio.NewIdentityResolver(alkemio.Config{
-		BaseURL:     cfg.AlkemioServerURL,
-		ResolvePath: cfg.AlkemioResolvePath,
-		Timeout:     cfg.IdentityTimeout,
-		MaxRetries:  cfg.IdentityMaxRetries,
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("configure api resolver: %w", err)
-	}
-
-	var dbResolver *alkemio.DatabaseResolver
-	var dbClose closerFunc
-
+func newResolver(ctx context.Context, cfg *config.ServiceConfig, logger *zap.Logger) (*alkemio.DatabaseResolver, closerFunc, error) {
 	pool, err := alkemio.NewDatabasePool(ctx, alkemio.DatabaseConfig{
 		DSN:     cfg.DatabaseDSN(),
 		Timeout: cfg.DatabaseTimeout,
 	}, logger)
 	if err != nil {
-		logger.Warn("database unavailable, using API-only resolution", zap.Error(err))
-	} else {
-		dbResolver = alkemio.NewDatabaseResolver(pool, logger)
-		dbClose = func() error { pool.Close(); return nil }
+		return nil, nil, fmt.Errorf("database connection required for migration: %w", err)
 	}
 
-	composite, err := alkemio.NewCompositeResolver(alkemio.CompositeConfig{
-		Database: dbResolver,
-		API:      apiResolver,
-		Logger:   logger,
-	})
-	if err != nil {
-		if dbClose != nil {
-			_ = dbClose.Close()
-		}
-		return nil, nil, fmt.Errorf("configure composite resolver: %w", err)
-	}
+	resolver := alkemio.NewDatabaseResolver(pool, logger)
+	closer := closerFunc(func() error { pool.Close(); return nil })
 
-	return composite, dbClose, nil
+	return resolver, closer, nil
 }
 
 type migrationResult struct {
@@ -140,7 +116,7 @@ type failedIdentity struct {
 	err string
 }
 
-func migrate(ctx context.Context, logger *zap.Logger, admin *webhook.KratosAdminClient, resolver *alkemio.CompositeResolver) error {
+func migrate(ctx context.Context, logger *zap.Logger, admin *webhook.KratosAdminClient, resolver *alkemio.DatabaseResolver) error {
 	start := time.Now()
 
 	var total, patched, skipped, failed atomic.Int64
@@ -173,6 +149,9 @@ func migrate(ctx context.Context, logger *zap.Logger, admin *webhook.KratosAdmin
 				if r.err == errAlreadyPatched {
 					skipped.Add(1)
 					logger.Debug("skipped (already patched)", zap.String("identity_id", maskID(r.identityID)))
+				} else if r.err == errNotInDB {
+					skipped.Add(1)
+					logger.Info("skipped (no alkemio user)", zap.String("identity_id", r.identityID))
 				} else {
 					failed.Add(1)
 					logger.Error("patch failed",
@@ -248,11 +227,17 @@ func migrate(ctx context.Context, logger *zap.Logger, admin *webhook.KratosAdmin
 	return nil
 }
 
-var errAlreadyPatched = fmt.Errorf("already patched")
+var (
+	errAlreadyPatched = fmt.Errorf("already patched")
+	errNotInDB        = fmt.Errorf("not in alkemio database")
+)
 
-func patchIdentity(ctx context.Context, admin *webhook.KratosAdminClient, resolver *alkemio.CompositeResolver, identityID string) error {
+func patchIdentity(ctx context.Context, admin *webhook.KratosAdminClient, resolver *alkemio.DatabaseResolver, identityID string) error {
 	mapping, err := resolver.Resolve(ctx, identityID)
 	if err != nil {
+		if errors.Is(err, alkemio.ErrDBNotFound) {
+			return errNotInDB
+		}
 		return fmt.Errorf("resolve: %w", err)
 	}
 

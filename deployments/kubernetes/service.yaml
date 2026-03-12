@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/part-of: alkemio-platform
 spec:
   selector:
-    app.kubernetes.io/name: oidc-service
+    app: oidc-service
   ports:
     - name: http
       port: 8080

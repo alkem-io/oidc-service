@@ -1,6 +1,7 @@
 name: Container Build
 
 on:
+  push:
   workflow_dispatch:
 
 jobs:

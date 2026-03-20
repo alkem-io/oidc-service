@@ -9,6 +9,7 @@ jobs:
     steps:
       - name: Set up Docker
         run: |
+          export PATH="/opt/homebrew/bin:$PATH"
           brew install docker docker-machine
           docker-machine create -d virtualbox default
           docker-machine env default --no-proxy | grep "^export" | sed 's/^export //' | sed 's/"//g' >> $GITHUB_ENV

@@ -16,6 +16,7 @@ jobs:
             echo "/opt/homebrew/bin" >> $GITHUB_PATH
           fi
           brew install docker colima
+          colima delete --force 2>/dev/null || true
           colima start
 
       - name: Checkout repository

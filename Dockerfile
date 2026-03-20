@@ -3,7 +3,7 @@
 ARG GO_VERSION=1.25
 ARG ALPINE_VERSION=3.22
 
-FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS build
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS build
 WORKDIR /workspace
 COPY go.mod ./
 COPY go.sum ./

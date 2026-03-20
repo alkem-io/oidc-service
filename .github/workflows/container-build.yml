@@ -7,12 +7,14 @@ jobs:
   build:
     runs-on: m4
     steps:
-      - name: Set up Docker
+      - name: Debug runner
         run: |
-          export PATH="/opt/homebrew/bin:$PATH"
-          brew install docker docker-machine
-          docker-machine create -d virtualbox default
-          docker-machine env default --no-proxy | grep "^export" | sed 's/^export //' | sed 's/"//g' >> $GITHUB_ENV
+          echo "PATH: $PATH"
+          which docker || echo "no docker"
+          which brew || echo "no brew"
+          ls /opt/homebrew/bin/ 2>/dev/null || echo "no /opt/homebrew"
+          ls /usr/local/bin/ 2>/dev/null | head -20
+          uname -a
 
       - name: Checkout repository
         uses: actions/checkout@v4

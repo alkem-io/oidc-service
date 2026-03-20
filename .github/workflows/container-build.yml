@@ -8,14 +8,15 @@ jobs:
   build:
     runs-on: m4
     steps:
-      - name: Debug runner
+      - name: Set up Docker
         run: |
-          echo "PATH: $PATH"
-          which docker || echo "no docker"
-          which brew || echo "no brew"
-          ls /opt/homebrew/bin/ 2>/dev/null || echo "no /opt/homebrew"
-          ls /usr/local/bin/ 2>/dev/null | head -20
-          uname -a
+          if ! command -v brew &>/dev/null; then
+            NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+            eval "$(/opt/homebrew/bin/brew shellenv)"
+            echo "/opt/homebrew/bin" >> $GITHUB_PATH
+          fi
+          brew install docker colima
+          colima start
 
       - name: Checkout repository
         uses: actions/checkout@v4

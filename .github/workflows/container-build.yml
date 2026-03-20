@@ -8,7 +8,10 @@ jobs:
     runs-on: m4
     steps:
       - name: Set up Docker
-        uses: douglascamata/setup-docker-macos-action@v1.1.0
+        run: |
+          brew install docker docker-machine
+          docker-machine create -d virtualbox default
+          docker-machine env default --no-proxy | grep "^export" | sed 's/^export //' | sed 's/"//g' >> $GITHUB_ENV
 
       - name: Checkout repository
         uses: actions/checkout@v4

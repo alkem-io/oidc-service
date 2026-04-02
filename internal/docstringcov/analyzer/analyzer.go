@@ -199,7 +199,7 @@ type symbolRecord struct {
 
 func collectSymbols(pkg *packages.Package, root string) []symbolRecord {
 	fset := pkg.Fset
-	symbols := make([]symbolRecord, 0)
+	var symbols []symbolRecord //nolint:prealloc // size unknown upfront, accumulated from multiple files
 	files := pkg.Syntax
 	compiled := pkg.CompiledGoFiles
 	goFiles := pkg.GoFiles

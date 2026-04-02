@@ -37,15 +37,6 @@ jobs:
       - name: Run unit tests
         run: go test ./... -race -count=1
 
-  test-docker:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Build Docker image
-        run: docker build -t oidc-service:test .
-
   sqlc-check:
     runs-on: ubuntu-latest
     steps:

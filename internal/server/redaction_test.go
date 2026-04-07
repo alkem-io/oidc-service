@@ -3,7 +3,7 @@ package server
 import "testing"
 
 func TestRedactRedirectURL(t *testing.T) {
-	tests := map[string]string{
+	tests := map[string]string{ //nolint:gosec // test data, not real credentials
 		"":                                    "",
 		"https://example.com/callback":        "https://example.com/callback",
 		"https://example.com/callback?code=1": "https://example.com/callback",

@@ -37,6 +37,11 @@ type ServiceConfig struct {
 	DatabasePassword string        `envconfig:"DATABASE_PASSWORD" default:"synapse"`
 	DatabaseName     string        `envconfig:"DATABASE_NAME" default:"alkemio"`
 	DatabaseTimeout  time.Duration `envconfig:"DATABASE_TIMEOUT" default:"5s"`
+
+	// PreConsentClientIDs lists the client_ids whose consent requests are auto-accepted
+	// by the pre-consent filter (FR-030 / T030). Comma-separated in env var
+	// OIDC_PRE_CONSENT_CLIENT_IDS. Empty list disables pre-consent entirely.
+	PreConsentClientIDs []string `envconfig:"PRE_CONSENT_CLIENT_IDS" default:""`
 }
 
 // MaintenanceState exposes the cached maintenance toggle information.

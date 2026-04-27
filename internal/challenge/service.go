@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -341,13 +342,16 @@ func (s *service) ResolveConsent(ctx context.Context, challengeID string) (*Reso
 		return nil, mapIdentityError(challengeID, err)
 	}
 
-	if err := s.attachAlkemioClaim(ctx, challengeID, profile); err != nil {
-		return nil, err
+	requestedScope := req.GetRequestedScope()
+	if slices.Contains(requestedScope, "alkemio") {
+		if err := s.attachAlkemioClaim(ctx, challengeID, profile); err != nil {
+			return nil, err
+		}
 	}
 
 	payload := hydraAdmin.NewAcceptOAuth2ConsentRequest()
-	if scopes := req.GetRequestedScope(); len(scopes) > 0 {
-		payload.SetGrantScope(scopes)
+	if len(requestedScope) > 0 {
+		payload.SetGrantScope(requestedScope)
 	}
 	payload.SetRemember(true)
 	payload.SetRememberFor(s.rememberFor)

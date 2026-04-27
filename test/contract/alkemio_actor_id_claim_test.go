@@ -26,6 +26,7 @@ func TestConsentAddsAlkemioActorIDClaim(t *testing.T) {
 	consent := hydraAdmin.NewOAuth2ConsentRequest(contractConsentChallenge)
 	consent.SetSubject(contractKratosID)
 	consent.SetContext(map[string]any{"identity_id": contractKratosID})
+	consent.SetRequestedScope([]string{"openid", "profile", "email", "offline_access", "alkemio"})
 
 	var (
 		capturedAccess map[string]any
@@ -101,6 +102,7 @@ func TestConsentFailsWhenAlkemioIdentityMissing(t *testing.T) {
 
 	consent := hydraAdmin.NewOAuth2ConsentRequest("consent-missing")
 	consent.SetSubject(contractKratosID)
+	consent.SetRequestedScope([]string{"openid", "profile", "email", "offline_access", "alkemio"})
 
 	hydraStub := &testsupport.HydraClientStub{
 		GetConsentFunc: func(_ context.Context, _ string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
@@ -156,6 +158,91 @@ func TestConsentFailsWhenAlkemioIdentityMissing(t *testing.T) {
 	if challengeErr.StatusCode() != http.StatusForbidden {
 		t.Fatalf("unexpected status code: %d", challengeErr.StatusCode())
 	}
+}
+
+// TestConsentOmitsAlkemioClaimWhenScopeAbsent verifies FR-005: the
+// alkemio_actor_id claim is gated on the alkemio scope being requested.
+// When the RP did NOT request the alkemio scope the consent flow MUST still
+// complete (claim work is silently skipped) and the emitted access_token /
+// id_token claim maps MUST NOT carry alkemio_actor_id.
+func TestConsentOmitsAlkemioClaimWhenScopeAbsent(t *testing.T) {
+	t.Parallel()
+
+	consent := hydraAdmin.NewOAuth2ConsentRequest(contractConsentChallenge)
+	consent.SetSubject(contractKratosID)
+	consent.SetContext(map[string]any{"identity_id": contractKratosID})
+	consent.SetRequestedScope([]string{"openid", "profile", "email"})
+
+	var (
+		capturedAccess map[string]any
+		capturedID     map[string]any
+		acceptCalls    int
+	)
+
+	hydraStub := &testsupport.HydraClientStub{
+		GetConsentFunc: func(_ context.Context, challengeID string) (
+			*hydraAdmin.OAuth2ConsentRequest, *http.Response, error,
+		) {
+			require.Equal(t, contractConsentChallenge, challengeID)
+			return consent, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+		},
+		AcceptConsentFunc: func(
+			_ context.Context, _ string, body *hydraAdmin.AcceptOAuth2ConsentRequest,
+		) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
+			acceptCalls++
+			session := body.GetSession()
+			if token := session.GetAccessToken(); token != nil {
+				if claims, ok := token.(map[string]any); ok {
+					capturedAccess = claims
+				}
+			}
+			if token := session.GetIdToken(); token != nil {
+				if claims, ok := token.(map[string]any); ok {
+					capturedID = claims
+				}
+			}
+			return hydraAdmin.NewOAuth2RedirectTo("https://app.example/callback"), &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+		},
+	}
+
+	identityStub := testsupport.IdentityFetcherStub{
+		FetchFunc: func(_ context.Context, identityID string) (*challenge.IdentityProfile, error) {
+			require.Equal(t, contractKratosID, identityID)
+			return &challenge.IdentityProfile{
+				ID:          identityID,
+				Email:       "user@example.com",
+				DisplayName: "Example User",
+			}, nil
+		},
+	}
+
+	resolverStub := testsupport.AlkemioResolverStub{
+		ResolveFunc: func(_ context.Context, _ string) (*alkemio.IdentityMapping, error) {
+			t.Fatal("alkemio resolver MUST NOT be called when alkemio scope absent")
+			return nil, nil
+		},
+	}
+
+	svc, err := challenge.NewService(
+		challenge.Options{
+			Hydra:    hydraStub,
+			Identity: identityStub,
+			Alkemio:  resolverStub,
+		},
+	)
+	require.NoError(t, err, "new service")
+
+	_, err = svc.ResolveConsent(context.Background(), contractConsentChallenge)
+	require.NoError(t, err, "consent must still resolve when alkemio scope absent")
+
+	require.Equal(t, 1, acceptCalls, "accept consent must be called exactly once")
+	require.NotNil(t, capturedAccess, "access token claims captured")
+	require.NotNil(t, capturedID, "id token claims captured")
+
+	_, accessHasClaim := capturedAccess["alkemio_actor_id"]
+	require.False(t, accessHasClaim, "access token MUST NOT carry alkemio_actor_id when alkemio scope absent")
+	_, idHasClaim := capturedID["alkemio_actor_id"]
+	require.False(t, idHasClaim, "id token MUST NOT carry alkemio_actor_id when alkemio scope absent")
 }
 
 func requireStringClaim(t *testing.T, claims map[string]any, key, expected string) {

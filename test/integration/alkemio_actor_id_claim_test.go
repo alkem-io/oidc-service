@@ -48,6 +48,7 @@ func TestConsentEndpointAddsAlkemioActorIDClaim(t *testing.T) {
 	consent := hydraAdmin.NewOAuth2ConsentRequest(challengeConsentID)
 	consent.SetSubject(testResolverFixture.AuthenticationID)
 	consent.SetContext(map[string]any{"identity_id": testResolverFixture.AuthenticationID})
+	consent.SetRequestedScope([]string{"openid", "profile", "email", "offline_access", "alkemio"})
 
 	var (
 		capturedAccess map[string]any
@@ -129,6 +130,7 @@ func TestConsentEndpointAddsAlkemioActorIDClaim(t *testing.T) {
 func TestConsentEndpointFailsWhenIdentityMissing(t *testing.T) {
 	consent := hydraAdmin.NewOAuth2ConsentRequest(challengeMissingID)
 	consent.SetSubject(testResolverFixture.AuthenticationID)
+	consent.SetRequestedScope([]string{"openid", "profile", "email", "offline_access", "alkemio"})
 
 	hydraStub := &testsupport.HydraClientStub{
 		GetConsentFunc: func(_ context.Context, _ string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
@@ -193,6 +195,7 @@ func TestConsentEndpointFailsOnResolverError(t *testing.T) {
 	consent := hydraAdmin.NewOAuth2ConsentRequest(challengeErrorID)
 	consent.SetSubject(testResolverFixture.AuthenticationID)
 	consent.SetContext(map[string]any{"identity_id": testResolverFixture.AuthenticationID})
+	consent.SetRequestedScope([]string{"openid", "profile", "email", "offline_access", "alkemio"})
 
 	hydraStub := &testsupport.HydraClientStub{
 		GetConsentFunc: func(_ context.Context, _ string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
@@ -257,6 +260,7 @@ func TestConsentEndpointFailsWhenActorIDInvalid(t *testing.T) {
 	consent := hydraAdmin.NewOAuth2ConsentRequest(challengeInvalidID)
 	consent.SetSubject(testResolverFixture.AuthenticationID)
 	consent.SetContext(map[string]any{"identity_id": testResolverFixture.AuthenticationID})
+	consent.SetRequestedScope([]string{"openid", "profile", "email", "offline_access", "alkemio"})
 
 	hydraStub := &testsupport.HydraClientStub{
 		GetConsentFunc: func(_ context.Context, _ string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
@@ -316,6 +320,7 @@ func TestConsentEndpointLogsResolverTimeout(t *testing.T) {
 	consent := hydraAdmin.NewOAuth2ConsentRequest(challengeTimeoutID)
 	consent.SetSubject(testResolverFixture.AuthenticationID)
 	consent.SetContext(map[string]any{"identity_id": testResolverFixture.AuthenticationID})
+	consent.SetRequestedScope([]string{"openid", "profile", "email", "offline_access", "alkemio"})
 
 	hydraStub := &testsupport.HydraClientStub{
 		GetConsentFunc: func(_ context.Context, _ string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {

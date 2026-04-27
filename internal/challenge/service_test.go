@@ -373,7 +373,7 @@ func TestResolveLoginHydra404ReturnsInvalidChallenge(t *testing.T) {
 func TestResolveConsentBuildsSessionClaims(t *testing.T) {
 	consent := hydraAdmin.NewOAuth2ConsentRequest(consentChallengeID)
 	consent.SetSubject(identityEmail)
-	consent.SetRequestedScope([]string{"openid", "profile"})
+	consent.SetRequestedScope([]string{"openid", "profile", "alkemio"})
 	consent.SetContext(map[string]any{identityContextKey: kratosIdentityID})
 
 	var capturedSession hydraAdmin.AcceptOAuth2ConsentRequestSession
@@ -391,7 +391,7 @@ func TestResolveConsentBuildsSessionClaims(t *testing.T) {
 		) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
 			capturedSession = body.GetSession()
 			capturedContext = body.GetContext()
-			require.Equal(t, []string{"openid", "profile"}, body.GetGrantScope())
+			require.Equal(t, []string{"openid", "profile", "alkemio"}, body.GetGrantScope())
 			return hydraAdmin.NewOAuth2RedirectTo(redirectURL), &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 		},
 	}
@@ -435,6 +435,7 @@ func TestResolveConsentBuildsSessionClaims(t *testing.T) {
 func TestResolveConsentInvalidAlkemioMappingReturnsError(t *testing.T) {
 	consent := hydraAdmin.NewOAuth2ConsentRequest(consentChallengeID)
 	consent.SetSubject(identityEmail)
+	consent.SetRequestedScope([]string{"openid", "profile", "alkemio"})
 	consent.SetContext(map[string]any{identityContextKey: kratosIdentityID})
 
 	mock := &hydraClientMock{

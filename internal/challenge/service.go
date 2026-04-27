@@ -60,6 +60,11 @@ type Options struct {
 	KratosProbe      ReadinessProbe
 	ReadinessTimeout time.Duration
 	Logger           Logger
+
+	// PreConsentClientIDs lists the client_ids whose consent challenges are
+	// auto-accepted by the pre-consent filter (FR-030 / T030). Consumed by
+	// the consent-resolution path; empty list disables the filter entirely.
+	PreConsentClientIDs []string
 }
 
 // Logger defines the logging interface used by the challenge service.

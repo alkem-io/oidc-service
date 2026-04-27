@@ -263,13 +263,14 @@ func newChallengeService(
 	}
 
 	svc, err := challenge.NewService(challenge.Options{
-		Hydra:            hydraOAuthClient,
-		Identity:         challenge.NewIdentityMapper(ory.kratos.Admin().IdentityAPI),
-		Alkemio:          identityResolver,
-		HydraProbe:       hydraProbe,
-		KratosProbe:      kratosProbe,
-		ReadinessTimeout: cfg.ReadinessTimeout,
-		Logger:           challenge.NewZapLoggerAdapter(logger),
+		Hydra:               hydraOAuthClient,
+		Identity:            challenge.NewIdentityMapper(ory.kratos.Admin().IdentityAPI),
+		Alkemio:             identityResolver,
+		HydraProbe:          hydraProbe,
+		KratosProbe:         kratosProbe,
+		ReadinessTimeout:    cfg.ReadinessTimeout,
+		Logger:              challenge.NewZapLoggerAdapter(logger),
+		PreConsentClientIDs: cfg.PreConsentClientIDs,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("configure challenge service: %w", err)

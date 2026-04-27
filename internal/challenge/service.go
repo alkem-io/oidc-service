@@ -14,6 +14,7 @@ import (
 	hydraAdmin "github.com/ory/hydra-client-go/v2"
 
 	"github.com/alkem-io/oidc-service/internal/alkemio"
+	"github.com/alkem-io/oidc-service/internal/audit"
 )
 
 const (
@@ -65,6 +66,11 @@ type Options struct {
 	// auto-accepted by the pre-consent filter (FR-030 / T030). Consumed by
 	// the consent-resolution path; empty list disables the filter entirely.
 	PreConsentClientIDs []string
+
+	// Audit, when non-nil, receives a `consent.auto_accept` event whenever the
+	// pre-consent filter short-circuits the consent flow (FR-030 / FR-035).
+	// Optional — production wires the stdout emitter; tests may leave it nil.
+	Audit *audit.Emitter
 }
 
 // Logger defines the logging interface used by the challenge service.
@@ -103,15 +109,17 @@ func (noopLogger) Debug(string, ...interface{}) {
 }
 
 type service struct {
-	hydra             HydraClient
-	identity          IdentityFetcher
-	alkemio           AlkemioResolver
-	rememberFor       int64
-	readinessDefaults ReadinessState
-	hydraProbe        ReadinessProbe
-	kratosProbe       ReadinessProbe
-	readyTimeout      time.Duration
-	logger            Logger
+	hydra               HydraClient
+	identity            IdentityFetcher
+	alkemio             AlkemioResolver
+	rememberFor         int64
+	readinessDefaults   ReadinessState
+	hydraProbe          ReadinessProbe
+	kratosProbe         ReadinessProbe
+	readyTimeout        time.Duration
+	logger              Logger
+	preConsentClientIDs []string
+	audit               *audit.Emitter
 }
 
 // ReadinessProbe evaluates upstream availability for readiness reporting.
@@ -173,15 +181,17 @@ func NewService(opts Options) (Service, error) {
 	}
 
 	return &service{
-		hydra:             opts.Hydra,
-		identity:          opts.Identity,
-		alkemio:           opts.Alkemio,
-		rememberFor:       int64(remember.Seconds()),
-		readinessDefaults: readiness,
-		hydraProbe:        opts.HydraProbe,
-		kratosProbe:       opts.KratosProbe,
-		readyTimeout:      timeout,
-		logger:            logger,
+		hydra:               opts.Hydra,
+		identity:            opts.Identity,
+		alkemio:             opts.Alkemio,
+		rememberFor:         int64(remember.Seconds()),
+		readinessDefaults:   readiness,
+		hydraProbe:          opts.HydraProbe,
+		kratosProbe:         opts.KratosProbe,
+		readyTimeout:        timeout,
+		logger:              logger,
+		preConsentClientIDs: append([]string(nil), opts.PreConsentClientIDs...),
+		audit:               opts.Audit,
 	}, nil
 }
 
@@ -337,6 +347,13 @@ func (s *service) ResolveConsent(ctx context.Context, challengeID string) (*Reso
 		return nil, NewHydraFailureError(challengeID, "hydra returned empty consent request")
 	}
 
+	// FR-030 — pre-consent allow-list short-circuit (T030). Trusted RPs skip the
+	// consent UI and identity-resolution work entirely; GrantScope mirrors
+	// RequestedScope and Hydra owns the rest of the token contents.
+	if s.isPreConsentClient(req) {
+		return s.resolveConsentAutoAccept(ctx, challengeID, req)
+	}
+
 	identityID := extractIdentityID(req)
 	if identityID == "" {
 		return nil, NewHydraFailureError(challengeID, "consent request missing identity reference")
@@ -376,6 +393,61 @@ func (s *service) ResolveConsent(ctx context.Context, challengeID string) (*Reso
 	}
 
 	return resolutionFromRedirect(challengeID, redirect)
+}
+
+func (s *service) isPreConsentClient(req *hydraAdmin.OAuth2ConsentRequest) bool {
+	if s == nil || req == nil || len(s.preConsentClientIDs) == 0 {
+		return false
+	}
+	client := req.GetClient()
+	clientID := strings.TrimSpace(client.GetClientId())
+	if clientID == "" {
+		return false
+	}
+	return slices.Contains(s.preConsentClientIDs, clientID)
+}
+
+func (s *service) resolveConsentAutoAccept(
+	ctx context.Context, challengeID string, req *hydraAdmin.OAuth2ConsentRequest,
+) (*Resolution, error) {
+	requested := req.GetRequestedScope()
+	payload := hydraAdmin.NewAcceptOAuth2ConsentRequest()
+	if len(requested) > 0 {
+		payload.SetGrantScope(requested)
+	}
+	payload.SetRemember(true)
+	payload.SetRememberFor(s.rememberFor)
+
+	redirect, resp, err := s.hydra.AcceptConsentRequest(ctx, challengeID, payload)
+	if resp != nil {
+		defer func() { _ = resp.Body.Close() }()
+	}
+	if err != nil {
+		return nil, mapHydraError(FlowConsent, challengeID, resp, err)
+	}
+
+	s.emitAutoAcceptAudit(req, requested)
+
+	return resolutionFromRedirect(challengeID, redirect)
+}
+
+func (s *service) emitAutoAcceptAudit(req *hydraAdmin.OAuth2ConsentRequest, requested []string) {
+	if s == nil || s.audit == nil || req == nil {
+		return
+	}
+	client := req.GetClient()
+	clientID := strings.TrimSpace(client.GetClientId())
+	scopes := strings.Join(requested, " ")
+	if err := s.audit.Emit(audit.Event{
+		EventType:      "consent.auto_accept",
+		Outcome:        audit.OutcomeSuccess,
+		Sub:            strings.TrimSpace(req.GetSubject()),
+		ClientID:       clientID,
+		RequestedScope: scopes,
+		GrantedScope:   scopes,
+	}); err != nil && s.logger != nil {
+		s.logger.Warn("emit consent.auto_accept audit failed", "error", err)
+	}
 }
 
 // Readiness reports the aggregated health of Hydra and Kratos probes.

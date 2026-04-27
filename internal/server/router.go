@@ -11,6 +11,7 @@ import (
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
 
+	"github.com/alkem-io/oidc-service/internal/audit"
 	"github.com/alkem-io/oidc-service/internal/challenge"
 	"github.com/alkem-io/oidc-service/internal/config"
 	"github.com/alkem-io/oidc-service/internal/maintenance"
@@ -25,14 +26,18 @@ type WebhookHandler interface {
 
 // Options bundles router dependencies.
 type Options struct {
-	Logger             *zap.Logger
-	Maintenance        *maintenance.State
-	Challenge          challenge.Service
-	SessionResolver    SessionIdentityResolver
-	SessionCookie      string
-	KratosBrowserURL   string
-	LoginReturnBaseURL string
-	WebhookHandler     WebhookHandler
+	Logger              *zap.Logger
+	Maintenance         *maintenance.State
+	Challenge           challenge.Service
+	SessionResolver     SessionIdentityResolver
+	SessionCookie       string
+	KratosBrowserURL    string
+	LoginReturnBaseURL  string
+	WebhookHandler      WebhookHandler
+	Audit               *audit.Emitter
+	EndSessionConfig    *EndSessionConfig
+	RefreshResolver     RefreshActorIDResolver
+	PostLogoutAllowList []string
 }
 
 // NewRouter wires core middleware and health endpoints.
@@ -130,6 +135,31 @@ func NewRouter(opts Options) http.Handler {
 
 	if opts.WebhookHandler != nil {
 		r.Post("/webhooks/kratos/post-login", opts.WebhookHandler.PostLogin)
+	}
+
+	endSessionCfg := EndSessionConfig{Logger: opts.Logger, Audit: opts.Audit}
+	if opts.EndSessionConfig != nil {
+		endSessionCfg = *opts.EndSessionConfig
+		if endSessionCfg.Logger == nil {
+			endSessionCfg.Logger = opts.Logger
+		}
+		if endSessionCfg.Audit == nil {
+			endSessionCfg.Audit = opts.Audit
+		}
+	}
+	if len(endSessionCfg.PostLogoutAllowList) == 0 && len(opts.PostLogoutAllowList) > 0 {
+		endSessionCfg.PostLogoutAllowList = append([]string(nil), opts.PostLogoutAllowList...)
+	}
+	endSessionHandler := NewEndSessionHandlerWithConfig(endSessionCfg)
+	for _, path := range []string{"/v1/oidc/end_session", "/oidc/end_session"} {
+		route := path
+		r.Get(route, endSessionHandler.ServeHTTP)
+	}
+
+	tokenHookHandler := NewTokenHookHandler(opts.Logger, opts.Audit, opts.RefreshResolver)
+	for _, path := range []string{"/v1/oidc/token-hook", "/oidc/token-hook"} {
+		route := path
+		r.Post(route, tokenHookHandler.ServeHTTP)
 	}
 
 	return r

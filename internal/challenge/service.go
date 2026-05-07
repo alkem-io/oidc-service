@@ -379,6 +379,9 @@ func (s *service) ResolveConsent(ctx context.Context, challengeID string) (*Reso
 	if len(requestedScope) > 0 {
 		payload.SetGrantScope(requestedScope)
 	}
+	if reqAud := req.GetRequestedAccessTokenAudience(); len(reqAud) > 0 {
+		payload.SetGrantAccessTokenAudience(reqAud)
+	}
 	payload.SetRemember(true)
 	payload.SetRememberFor(s.rememberFor)
 	payload.SetContext(buildConsentContext(profile))
@@ -449,6 +452,9 @@ func (s *service) resolveConsentAutoAccept(
 	payload := hydraAdmin.NewAcceptOAuth2ConsentRequest()
 	if len(requested) > 0 {
 		payload.SetGrantScope(requested)
+	}
+	if reqAud := req.GetRequestedAccessTokenAudience(); len(reqAud) > 0 {
+		payload.SetGrantAccessTokenAudience(reqAud)
 	}
 	payload.SetRemember(true)
 	payload.SetRememberFor(s.rememberFor)

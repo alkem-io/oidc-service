@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/alkem-io/oidc-service/internal/alkemio"
+	"github.com/alkem-io/oidc-service/internal/audit"
 	"github.com/alkem-io/oidc-service/internal/challenge"
 	"github.com/alkem-io/oidc-service/internal/config"
 	"github.com/alkem-io/oidc-service/internal/hydra"
@@ -271,6 +272,7 @@ func newChallengeService(
 		ReadinessTimeout:    cfg.ReadinessTimeout,
 		Logger:              challenge.NewZapLoggerAdapter(logger),
 		PreConsentClientIDs: cfg.PreConsentClientIDs,
+		Audit:               audit.NewEmitter(os.Stdout),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("configure challenge service: %w", err)

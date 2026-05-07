@@ -25,6 +25,11 @@ func (s *stubService) ResolveConsent(ctx context.Context, challengeID string) (*
 	return s.resolve(ctx, "consent", challengeID)
 }
 
+// ResolveLogout returns deterministic responses for logout flows in stub mode.
+func (s *stubService) ResolveLogout(ctx context.Context, challengeID string) (*Resolution, error) {
+	return s.resolve(ctx, "logout", challengeID)
+}
+
 // Readiness reports synthetic health data for the stub implementation.
 func (s *stubService) Readiness(_ context.Context) ReadinessState {
 	return ReadinessState{

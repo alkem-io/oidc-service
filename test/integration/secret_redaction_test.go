@@ -104,6 +104,10 @@ func (s *redactionChallengeService) ResolveConsent(_ context.Context, _ string) 
 	return &challenge.Resolution{RedirectURL: s.redirect}, nil
 }
 
+func (s *redactionChallengeService) ResolveLogout(_ context.Context, _ string) (*challenge.Resolution, error) {
+	return &challenge.Resolution{RedirectURL: s.redirect}, nil
+}
+
 func (s *redactionChallengeService) Readiness(_ context.Context) challenge.ReadinessState {
 	return s.readiness
 }

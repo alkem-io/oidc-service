@@ -133,6 +133,16 @@ func NewRouter(opts Options) http.Handler {
 		)
 	}
 
+	logoutHandler := NewLogoutHandler(opts.Logger, opts.Challenge)
+	for _, path := range []string{"/v1/oidc/logout", "/oidc/logout"} {
+		route := path
+		r.Get(
+			route, func(w http.ResponseWriter, r *http.Request) {
+				logoutHandler.Handle(w, r)
+			},
+		)
+	}
+
 	if opts.WebhookHandler != nil {
 		r.Post("/webhooks/kratos/post-login", opts.WebhookHandler.PostLogin)
 	}

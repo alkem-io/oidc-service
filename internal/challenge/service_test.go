@@ -606,6 +606,12 @@ type hydraClientMock struct {
 	acceptConsent func(
 		ctx context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2ConsentRequest,
 	) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error)
+	getLogout func(
+		ctx context.Context, challengeID string,
+	) (*hydraAdmin.OAuth2LogoutRequest, *http.Response, error)
+	acceptLogout func(
+		ctx context.Context, challengeID string,
+	) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error)
 }
 
 func (m *hydraClientMock) GetLoginRequest(ctx context.Context, challengeID string) (
@@ -642,6 +648,24 @@ func (m *hydraClientMock) AcceptConsentRequest(
 		return nil, nil, errors.New("acceptConsent not stubbed")
 	}
 	return m.acceptConsent(ctx, challengeID, body)
+}
+
+func (m *hydraClientMock) GetLogoutRequest(ctx context.Context, challengeID string) (
+	*hydraAdmin.OAuth2LogoutRequest, *http.Response, error,
+) {
+	if m.getLogout == nil {
+		return nil, nil, errors.New("getLogout not stubbed")
+	}
+	return m.getLogout(ctx, challengeID)
+}
+
+func (m *hydraClientMock) AcceptLogoutRequest(ctx context.Context, challengeID string) (
+	*hydraAdmin.OAuth2RedirectTo, *http.Response, error,
+) {
+	if m.acceptLogout == nil {
+		return nil, nil, errors.New("acceptLogout not stubbed")
+	}
+	return m.acceptLogout(ctx, challengeID)
 }
 
 type identityFetcherStub struct {

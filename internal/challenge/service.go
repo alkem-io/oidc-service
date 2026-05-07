@@ -36,6 +36,10 @@ type HydraClient interface {
 	AcceptConsentRequest(
 		ctx context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2ConsentRequest,
 	) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error)
+	// GetLogoutRequest retrieves the logout request from Hydra.
+	GetLogoutRequest(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2LogoutRequest, *http.Response, error)
+	// AcceptLogoutRequest accepts the logout request in Hydra.
+	AcceptLogoutRequest(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error)
 }
 
 // IdentityFetcher retrieves identity profiles given a Kratos identifier.
@@ -395,6 +399,37 @@ func (s *service) ResolveConsent(ctx context.Context, challengeID string) (*Reso
 	return resolutionFromRedirect(challengeID, redirect)
 }
 
+// ResolveLogout drives Hydra's logout challenge to completion. The logout-consent UI
+// configured at urls.logout is reached only after the calling RP (or Hydra itself) has
+// already authorised the logout intent, so we auto-accept and propagate Hydra's
+// redirect_to. No identity/audit work is needed here — RP-initiated audit is emitted
+// by the end_session handler; pure Hydra-initiated logouts produce no audit.
+func (s *service) ResolveLogout(ctx context.Context, challengeID string) (*Resolution, error) {
+	challengeID = strings.TrimSpace(challengeID)
+	if challengeID == "" {
+		return nil, NewError(http.StatusBadRequest, "missing_challenge", "logout challenge is required", "", nil)
+	}
+
+	if _, resp, err := s.hydra.GetLogoutRequest(ctx, challengeID); err != nil {
+		if resp != nil {
+			defer func() { _ = resp.Body.Close() }()
+		}
+		return nil, mapHydraError(FlowLogout, challengeID, resp, err)
+	} else if resp != nil {
+		defer func() { _ = resp.Body.Close() }()
+	}
+
+	redirect, resp, err := s.hydra.AcceptLogoutRequest(ctx, challengeID)
+	if resp != nil {
+		defer func() { _ = resp.Body.Close() }()
+	}
+	if err != nil {
+		return nil, mapHydraError(FlowLogout, challengeID, resp, err)
+	}
+
+	return resolutionFromRedirect(challengeID, redirect)
+}
+
 func (s *service) isPreConsentClient(req *hydraAdmin.OAuth2ConsentRequest) bool {
 	if s == nil || req == nil || len(s.preConsentClientIDs) == 0 {
 		return false
@@ -417,6 +452,28 @@ func (s *service) resolveConsentAutoAccept(
 	}
 	payload.SetRemember(true)
 	payload.SetRememberFor(s.rememberFor)
+
+	// Pre-consent skips the consent UI but must still resolve identity and
+	// attach `alkemio_actor_id` so RPs receive it in tokens (FR-024a). Without
+	// this, the BFF cookie session lacks alkemio_actor_id and downstream
+	// authorization treats the user as anonymous.
+	identityID := extractIdentityID(req)
+	if identityID != "" && s.identity != nil {
+		profile, fetchErr := s.identity.Fetch(ctx, identityID)
+		if fetchErr != nil {
+			return nil, mapIdentityError(challengeID, fetchErr)
+		}
+		if slices.Contains(requested, "alkemio") {
+			if claimErr := s.attachAlkemioClaim(ctx, challengeID, profile); claimErr != nil {
+				return nil, claimErr
+			}
+		}
+		session := hydraAdmin.NewAcceptOAuth2ConsentRequestSession()
+		session.SetIdToken(s.buildIDTokenClaims(profile))
+		session.SetAccessToken(s.buildAccessTokenClaims(profile))
+		payload.SetSession(*session)
+		payload.SetContext(buildConsentContext(profile))
+	}
 
 	redirect, resp, err := s.hydra.AcceptConsentRequest(ctx, challengeID, payload)
 	if resp != nil {

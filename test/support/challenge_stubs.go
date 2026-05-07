@@ -17,6 +17,8 @@ type HydraClientStub struct {
 	AcceptLoginFunc   func(ctx context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2LoginRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error)
 	GetConsentFunc    func(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error)
 	AcceptConsentFunc func(ctx context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error)
+	GetLogoutFunc     func(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2LogoutRequest, *http.Response, error)
+	AcceptLogoutFunc  func(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error)
 }
 
 // GetLoginRequest executes the configured stub for Hydra login lookups.
@@ -49,6 +51,22 @@ func (s *HydraClientStub) AcceptConsentRequest(ctx context.Context, challengeID 
 		return nil, nil, errors.New("accept consent request not stubbed")
 	}
 	return s.AcceptConsentFunc(ctx, challengeID, body)
+}
+
+// GetLogoutRequest executes the configured stub for Hydra logout lookups.
+func (s *HydraClientStub) GetLogoutRequest(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2LogoutRequest, *http.Response, error) {
+	if s == nil || s.GetLogoutFunc == nil {
+		return nil, nil, errors.New("get logout request not stubbed")
+	}
+	return s.GetLogoutFunc(ctx, challengeID)
+}
+
+// AcceptLogoutRequest executes the configured stub for Hydra logout acceptance.
+func (s *HydraClientStub) AcceptLogoutRequest(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
+	if s == nil || s.AcceptLogoutFunc == nil {
+		return nil, nil, errors.New("accept logout request not stubbed")
+	}
+	return s.AcceptLogoutFunc(ctx, challengeID)
 }
 
 // IdentityFetcherStub provides a configurable IdentityFetcher implementation for tests.

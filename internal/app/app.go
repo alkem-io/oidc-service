@@ -313,6 +313,8 @@ func newHTTPServer(
 		KratosBrowserURL:   cfg.KratosBrowserURL,
 		LoginReturnBaseURL: cfg.LoginReturnBaseURL,
 		WebhookHandler:     webhookHandler,
+		HydraAdminURL:      cfg.HydraAdminURL,
+		KratosAdminURL:     cfg.KratosAdminURL,
 	})
 
 	return &http.Server{

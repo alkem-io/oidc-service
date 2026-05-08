@@ -38,6 +38,12 @@ type Options struct {
 	EndSessionConfig    *EndSessionConfig
 	RefreshResolver     RefreshActorIDResolver
 	PostLogoutAllowList []string
+	// HydraAdminURL + KratosAdminURL drive the FR-036a readiness probe in
+	// `health.go`. When empty, the probes report `unhealthy` with
+	// `url_not_configured` — k8s will keep the pod out of rotation, which
+	// is the correct fail-closed behaviour for a misconfigured deploy.
+	HydraAdminURL  string
+	KratosAdminURL string
 }
 
 // NewRouter wires core middleware and health endpoints.
@@ -66,43 +72,35 @@ func NewRouter(opts Options) http.Handler {
 		),
 	)
 
-	r.Get(
-		"/health/live", func(w http.ResponseWriter, _ *http.Request) {
-			writeJSON(w, http.StatusOK, map[string]any{"status": "alive"})
-		},
-	)
+	// FR-036a — k8s liveness/readiness probes. `live` MUST NOT call out to
+	// any dep (a transient Hydra/Kratos blip would otherwise restart the
+	// pod). `ready` probes both admin planes with a uniform ≤500 ms
+	// timeout and caches the result for ≤2 s.
+	healthHandler := NewHealthHandler(HealthConfig{
+		Logger:         opts.Logger,
+		HydraAdminURL:  opts.HydraAdminURL,
+		KratosAdminURL: opts.KratosAdminURL,
+	})
 
-	r.Get(
-		"/health/ready", func(w http.ResponseWriter, r *http.Request) {
-			state := opts.Maintenance.Snapshot()
-			readiness := opts.Challenge.Readiness(r.Context())
-
-			payload := map[string]any{
-				"status":      readiness.Status,
-				"hydra":       readiness.Hydra,
-				"kratos":      readiness.Kratos,
-				"maintenance": state.Enabled,
+	r.Get("/health/live", healthHandler.ServeLive)
+	r.Get("/health/ready", func(w http.ResponseWriter, r *http.Request) {
+		// Maintenance overlay — when the operator has flipped the service
+		// into maintenance, pull the pod from rotation regardless of the
+		// upstream dep state. This matches the prior behaviour and is the
+		// only way operators can drain traffic without stopping the pod.
+		state := opts.Maintenance.Snapshot()
+		if state.Enabled {
+			if value := retryAfterHeader(state); value != "" {
+				w.Header().Set("Retry-After", value)
 			}
-			if readiness.Version != "" {
-				payload["version"] = readiness.Version
-			}
-
-			statusCode := http.StatusOK
-			if readiness.Status != "ready" {
-				statusCode = http.StatusServiceUnavailable
-				payload["status"] = readiness.Status
-			}
-			if state.Enabled {
-				statusCode = http.StatusServiceUnavailable
-				payload["status"] = "maintenance"
-				if value := retryAfterHeader(state); value != "" {
-					w.Header().Set("Retry-After", value)
-				}
-			}
-
-			writeJSON(w, statusCode, payload)
-		},
-	)
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+				"status":      "maintenance",
+				"maintenance": true,
+			})
+			return
+		}
+		healthHandler.ServeReady(w, r)
+	})
 
 	loginHandler := NewLoginHandler(
 		LoginHandlerConfig{

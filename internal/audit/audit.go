@@ -19,11 +19,25 @@ const (
 	OutcomeWarn    Outcome = "warn"
 )
 
+// Event-type constants. New emitters SHOULD reference these constants rather
+// than rebuilding the string literal at the call site so the taxonomy stays
+// grep-able. The dot-form (`token.mint`) matches the in-repo idiom used by
+// existing emitters such as `session.end_session` and
+// `refresh.missing_alkemio_actor_id`; the audit-event-service-actor.md
+// contract's underscore-form is the on-the-wire field name documented for
+// downstream Logstash routing, but the wire name and the Go constant string
+// are intentionally identical — callers compose the value as-is.
+const (
+	EventTypeTokenMint   = "token.mint"
+	EventTypeTokenRevoke = "token.revoke"
+)
+
 // Omitted pointer / empty fields are dropped from the emitted JSON via the
 // omitempty tag so records stay PII-minimal by default.
 type Event struct {
 	EventType      string  `json:"event_type"`
 	Outcome        Outcome `json:"outcome"`
+	ActorType      string  `json:"actor_type,omitempty"`
 	Sub            string  `json:"sub,omitempty"`
 	ClientID       string  `json:"client_id,omitempty"`
 	CorrelationID  string  `json:"correlation_id"`

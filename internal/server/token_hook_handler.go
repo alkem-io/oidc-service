@@ -5,11 +5,23 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
+	"strings"
 
 	"go.uber.org/zap"
 
 	"github.com/alkem-io/oidc-service/internal/audit"
 	"github.com/alkem-io/oidc-service/internal/challenge"
+)
+
+// Grant-type discriminator values used by FR-026 / FR-021 actor-type tagging
+// on token-mint audit events. `client_credentials` is the OAuth 2 grant Hydra
+// issues to service principals (machine-to-machine); every other grant
+// (`authorization_code`, `refresh_token`, etc.) is a user-actor mint.
+const (
+	grantTypeClientCredentials = "client_credentials"
+	actorTypeServiceClient     = "service-client"
+	actorTypeUser              = "user"
 )
 
 // RefreshActorIDResolver re-resolves `alkemio_actor_id` for a given Kratos
@@ -154,6 +166,29 @@ func (h *TokenHookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			IDToken:     idTokenClaims,
 		},
 	}
+
+	// FR-021 / FR-026 — emit a single `token.mint` audit event per issuance,
+	// discriminated by `actor_type`. `client_credentials` is the m2m grant
+	// (service principals); every other grant (`authorization_code`,
+	// `refresh_token`, …) is a user-actor mint. Hydra may list multiple
+	// grant types on `requester.grant_types`, so use slices.Contains rather
+	// than equality. The consent path (`internal/challenge/service.go`) is
+	// NOT touched — per research.md R-9 addendum the consent stage is
+	// unreachable for `client_credentials`, so the token-mint webhook is
+	// the only place we can observe service-principal mints.
+	actorType := actorTypeUser
+	if slices.Contains(req.Requester.GrantTypes, grantTypeClientCredentials) {
+		actorType = actorTypeServiceClient
+	}
+	h.emit(r.Context(), audit.Event{
+		EventType:    audit.EventTypeTokenMint,
+		Outcome:      audit.OutcomeSuccess,
+		ActorType:    actorType,
+		Sub:          req.Session.Subject,
+		ClientID:     req.Requester.ClientID,
+		GrantedScope: strings.Join(req.Requester.GrantedScopes, " "),
+	})
+
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		h.logger.Warn("encode token-hook response failed", zap.Error(err))

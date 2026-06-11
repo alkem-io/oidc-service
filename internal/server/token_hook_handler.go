@@ -16,6 +16,8 @@ import (
 // identity at refresh-token exchange time. Production wires
 // challenge.RefreshResolver; tests substitute a deterministic fake.
 type RefreshActorIDResolver interface {
+	// Resolve returns the alkemio_actor_id for the identity, or "" (with a
+	// nil error) when the granted scope omits `alkemio` or no mapping exists.
 	Resolve(ctx context.Context, identityID string, grantedScope []string) (string, error)
 }
 
@@ -106,12 +108,13 @@ func (h *TokenHookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The http.Server closes the request body after the handler returns;
+	// no explicit Close is needed here.
 	var req hookRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid_request", http.StatusBadRequest)
 		return
 	}
-	defer func() { _ = r.Body.Close() }()
 
 	// Default response: echo the input session unchanged. Hydra REPLACES
 	// session from hook response — emitting empty maps without the echo

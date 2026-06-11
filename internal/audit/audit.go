@@ -1,3 +1,5 @@
+// Package audit emits structured security-audit events as JSON lines.
+//
 // In local-dev the events are written as one JSON line per record to stdout.
 // In k8s a Filebeat → Logstash → Elasticsearch pipeline collects the same
 // stream. The Emitter type is transport-agnostic; callers pass the writer.
@@ -11,16 +13,19 @@ import (
 	"time"
 )
 
+// Outcome classifies how the audited operation ended.
 type Outcome string
 
+// Outcome values carried by emitted audit events.
 const (
 	OutcomeSuccess Outcome = "success"
 	OutcomeFailure Outcome = "failure"
 	OutcomeWarn    Outcome = "warn"
 )
 
-// Omitted pointer / empty fields are dropped from the emitted JSON via the
-// omitempty tag so records stay PII-minimal by default.
+// Event is a single audit record. Omitted pointer / empty fields are dropped
+// from the emitted JSON via the omitempty tag so records stay PII-minimal by
+// default.
 type Event struct {
 	EventType      string  `json:"event_type"`
 	Outcome        Outcome `json:"outcome"`

@@ -83,24 +83,7 @@ func NewRouter(opts Options) http.Handler {
 	})
 
 	r.Get("/health/live", healthHandler.ServeLive)
-	r.Get("/health/ready", func(w http.ResponseWriter, r *http.Request) {
-		// Maintenance overlay — when the operator has flipped the service
-		// into maintenance, pull the pod from rotation regardless of the
-		// upstream dep state. This matches the prior behaviour and is the
-		// only way operators can drain traffic without stopping the pod.
-		state := opts.Maintenance.Snapshot()
-		if state.Enabled {
-			if value := retryAfterHeader(state); value != "" {
-				w.Header().Set("Retry-After", value)
-			}
-			writeJSON(w, http.StatusServiceUnavailable, map[string]any{
-				"status":      "maintenance",
-				"maintenance": true,
-			})
-			return
-		}
-		healthHandler.ServeReady(w, r)
-	})
+	r.Get("/health/ready", maintenanceAwareReady(opts.Maintenance, healthHandler))
 
 	loginHandler := NewLoginHandler(
 		LoginHandlerConfig{
@@ -145,20 +128,7 @@ func NewRouter(opts Options) http.Handler {
 		r.Post("/webhooks/kratos/post-login", opts.WebhookHandler.PostLogin)
 	}
 
-	endSessionCfg := EndSessionConfig{Logger: opts.Logger, Audit: opts.Audit}
-	if opts.EndSessionConfig != nil {
-		endSessionCfg = *opts.EndSessionConfig
-		if endSessionCfg.Logger == nil {
-			endSessionCfg.Logger = opts.Logger
-		}
-		if endSessionCfg.Audit == nil {
-			endSessionCfg.Audit = opts.Audit
-		}
-	}
-	if len(endSessionCfg.PostLogoutAllowList) == 0 && len(opts.PostLogoutAllowList) > 0 {
-		endSessionCfg.PostLogoutAllowList = append([]string(nil), opts.PostLogoutAllowList...)
-	}
-	endSessionHandler := NewEndSessionHandlerWithConfig(endSessionCfg)
+	endSessionHandler := NewEndSessionHandlerWithConfig(mergeEndSessionConfig(opts))
 	for _, path := range []string{"/v1/oidc/end_session", "/oidc/end_session"} {
 		route := path
 		r.Get(route, endSessionHandler.ServeHTTP)
@@ -171,6 +141,47 @@ func NewRouter(opts Options) http.Handler {
 	}
 
 	return r
+}
+
+// maintenanceAwareReady overlays the maintenance state on the readiness
+// probe — when the operator has flipped the service into maintenance, pull
+// the pod from rotation regardless of the upstream dep state. This is the
+// only way operators can drain traffic without stopping the pod.
+func maintenanceAwareReady(state *maintenance.State, healthHandler *HealthHandler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		snapshot := state.Snapshot()
+		if snapshot.Enabled {
+			if value := retryAfterHeader(snapshot); value != "" {
+				w.Header().Set("Retry-After", value)
+			}
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+				"status":      "maintenance",
+				"maintenance": true,
+			})
+			return
+		}
+		healthHandler.ServeReady(w, r)
+	}
+}
+
+// mergeEndSessionConfig resolves the end-session handler config: an explicit
+// opts.EndSessionConfig wins field-by-field, with nil/empty Logger, Audit and
+// PostLogoutAllowList backfilled from the top-level Options.
+func mergeEndSessionConfig(opts Options) EndSessionConfig {
+	cfg := EndSessionConfig{}
+	if opts.EndSessionConfig != nil {
+		cfg = *opts.EndSessionConfig
+	}
+	if cfg.Logger == nil {
+		cfg.Logger = opts.Logger
+	}
+	if cfg.Audit == nil {
+		cfg.Audit = opts.Audit
+	}
+	if len(cfg.PostLogoutAllowList) == 0 && len(opts.PostLogoutAllowList) > 0 {
+		cfg.PostLogoutAllowList = append([]string(nil), opts.PostLogoutAllowList...)
+	}
+	return cfg
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {

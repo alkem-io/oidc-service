@@ -15,16 +15,18 @@ import (
 // FR-036a — uniform ≤500 ms timeout per dependency check, ≤2 s TTL cache on
 // the dep-check result so probe storms don't saturate the dependency.
 const (
-	depCheckTimeout = 500 * time.Millisecond
+	depCheckTimeout  = 500 * time.Millisecond
 	depCheckCacheTTL = 2 * time.Second
 
-	// Kratos and Hydra both expose `/admin/health/alive` returning
-	// `{"status":"ok"}`. Hydra's path is the same shape under its admin host.
-	// Using the alive endpoint (not `/ready`) is intentional — `/admin/health/ready`
-	// on Hydra/Kratos transitively checks their database, which makes the
-	// readiness probe fail-cascade through three services. We only need to
-	// know "the admin HTTP plane responds"; downstream dep-of-dep failures
-	// surface through the actual login/consent flows, not the probe.
+	// Kratos serves health under its admin prefix (`/admin/health/{alive,ready}`),
+	// Hydra at the root of the admin host (`/health/{alive,ready}`) — hence
+	// kratosAliveProbePath and hydraAliveProbePath differ. Both return
+	// `{"status":"ok"}`. Using the alive endpoint (not `/ready`) is
+	// intentional — the ready variant on Hydra/Kratos transitively checks
+	// their database, which makes the readiness probe fail-cascade through
+	// three services. We only need to know "the admin HTTP plane responds";
+	// downstream dep-of-dep failures surface through the actual login/consent
+	// flows, not the probe.
 	kratosAliveProbePath = "/admin/health/alive"
 	hydraAliveProbePath  = "/health/alive"
 )
@@ -162,10 +164,46 @@ func (h *HealthHandler) evaluateReadiness(ctx context.Context) ReadinessResult {
 	}
 
 	h.mu.Lock()
+	var previous *ReadinessResult
+	if h.cachedReady != nil {
+		prev := h.cachedReady.result
+		previous = &prev
+	}
 	h.cachedReady = &cachedReadyResult{result: result, storedAt: h.now()}
 	h.mu.Unlock()
 
+	h.logReadinessTransitions(previous, result)
+
 	return result
+}
+
+// logReadinessTransitions emits one line per dependency whose status changed
+// since the previous evaluation so operators can trace healthy↔unhealthy
+// flips without polling /health/ready. Steady-state results stay silent —
+// k8s probes fire every few seconds and logging each would drown the stream.
+func (h *HealthHandler) logReadinessTransitions(previous *ReadinessResult, current ReadinessResult) {
+	logDep := func(name string, before *CheckResult, after CheckResult) {
+		if before != nil && before.Status == after.Status {
+			return
+		}
+		if after.Status != checkStatusOK {
+			h.logger.Warn("readiness dependency unhealthy",
+				zap.String("dependency", name),
+				zap.String("error", after.Error))
+			return
+		}
+		if before != nil {
+			h.logger.Info("readiness dependency recovered", zap.String("dependency", name))
+		}
+	}
+
+	var kratosBefore, hydraBefore *CheckResult
+	if previous != nil {
+		kratosBefore = &previous.Checks.Kratos
+		hydraBefore = &previous.Checks.Hydra
+	}
+	logDep("kratos", kratosBefore, current.Checks.Kratos)
+	logDep("hydra", hydraBefore, current.Checks.Hydra)
 }
 
 // probeURL issues a GET against `baseURL+path` with a 500 ms deadline.

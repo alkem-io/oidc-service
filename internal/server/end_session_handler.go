@@ -18,6 +18,7 @@ import (
 // JWKS-backed validator that performs full Hydra signature/iss/exp checks;
 // the contract test surface relies on the shape-only default.
 type IDTokenValidator interface {
+	// Validate checks the id_token_hint and returns its subject and client_id.
 	Validate(ctx context.Context, idToken string) (subject string, clientID string, err error)
 }
 
@@ -25,6 +26,7 @@ type IDTokenValidator interface {
 // (DELETE /admin/oauth2/auth/sessions/consent?client=<id>&subject=<sub>).
 // Tests pass nil to skip the call entirely; the response path is unchanged.
 type HydraConsentRevoker interface {
+	// RevokeConsent deletes the consent session for the client/subject pair.
 	RevokeConsent(ctx context.Context, clientID, subject string) error
 }
 

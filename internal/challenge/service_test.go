@@ -373,7 +373,7 @@ func TestResolveLoginHydra404ReturnsInvalidChallenge(t *testing.T) {
 func TestResolveConsentBuildsSessionClaims(t *testing.T) {
 	consent := hydraAdmin.NewOAuth2ConsentRequest(consentChallengeID)
 	consent.SetSubject(identityEmail)
-	consent.SetRequestedScope([]string{"openid", "profile"})
+	consent.SetRequestedScope([]string{"openid", "profile", "alkemio"})
 	consent.SetContext(map[string]any{identityContextKey: kratosIdentityID})
 
 	var capturedSession hydraAdmin.AcceptOAuth2ConsentRequestSession
@@ -391,7 +391,7 @@ func TestResolveConsentBuildsSessionClaims(t *testing.T) {
 		) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
 			capturedSession = body.GetSession()
 			capturedContext = body.GetContext()
-			require.Equal(t, []string{"openid", "profile"}, body.GetGrantScope())
+			require.Equal(t, []string{"openid", "profile", "alkemio"}, body.GetGrantScope())
 			return hydraAdmin.NewOAuth2RedirectTo(redirectURL), &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 		},
 	}
@@ -435,6 +435,7 @@ func TestResolveConsentBuildsSessionClaims(t *testing.T) {
 func TestResolveConsentInvalidAlkemioMappingReturnsError(t *testing.T) {
 	consent := hydraAdmin.NewOAuth2ConsentRequest(consentChallengeID)
 	consent.SetSubject(identityEmail)
+	consent.SetRequestedScope([]string{"openid", "profile", "alkemio"})
 	consent.SetContext(map[string]any{identityContextKey: kratosIdentityID})
 
 	mock := &hydraClientMock{
@@ -605,6 +606,12 @@ type hydraClientMock struct {
 	acceptConsent func(
 		ctx context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2ConsentRequest,
 	) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error)
+	getLogout func(
+		ctx context.Context, challengeID string,
+	) (*hydraAdmin.OAuth2LogoutRequest, *http.Response, error)
+	acceptLogout func(
+		ctx context.Context, challengeID string,
+	) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error)
 }
 
 func (m *hydraClientMock) GetLoginRequest(ctx context.Context, challengeID string) (
@@ -641,6 +648,24 @@ func (m *hydraClientMock) AcceptConsentRequest(
 		return nil, nil, errors.New("acceptConsent not stubbed")
 	}
 	return m.acceptConsent(ctx, challengeID, body)
+}
+
+func (m *hydraClientMock) GetLogoutRequest(ctx context.Context, challengeID string) (
+	*hydraAdmin.OAuth2LogoutRequest, *http.Response, error,
+) {
+	if m.getLogout == nil {
+		return nil, nil, errors.New("getLogout not stubbed")
+	}
+	return m.getLogout(ctx, challengeID)
+}
+
+func (m *hydraClientMock) AcceptLogoutRequest(ctx context.Context, challengeID string) (
+	*hydraAdmin.OAuth2RedirectTo, *http.Response, error,
+) {
+	if m.acceptLogout == nil {
+		return nil, nil, errors.New("acceptLogout not stubbed")
+	}
+	return m.acceptLogout(ctx, challengeID)
 }
 
 type identityFetcherStub struct {

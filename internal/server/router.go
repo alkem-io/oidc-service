@@ -11,6 +11,7 @@ import (
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
 
+	"github.com/alkem-io/oidc-service/internal/audit"
 	"github.com/alkem-io/oidc-service/internal/challenge"
 	"github.com/alkem-io/oidc-service/internal/config"
 	"github.com/alkem-io/oidc-service/internal/maintenance"
@@ -25,14 +26,24 @@ type WebhookHandler interface {
 
 // Options bundles router dependencies.
 type Options struct {
-	Logger             *zap.Logger
-	Maintenance        *maintenance.State
-	Challenge          challenge.Service
-	SessionResolver    SessionIdentityResolver
-	SessionCookie      string
-	KratosBrowserURL   string
-	LoginReturnBaseURL string
-	WebhookHandler     WebhookHandler
+	Logger              *zap.Logger
+	Maintenance         *maintenance.State
+	Challenge           challenge.Service
+	SessionResolver     SessionIdentityResolver
+	SessionCookie       string
+	KratosBrowserURL    string
+	LoginReturnBaseURL  string
+	WebhookHandler      WebhookHandler
+	Audit               *audit.Emitter
+	EndSessionConfig    *EndSessionConfig
+	RefreshResolver     RefreshActorIDResolver
+	PostLogoutAllowList []string
+	// HydraAdminURL + KratosAdminURL drive the FR-036a readiness probe in
+	// `health.go`. When empty, the probes report `unhealthy` with
+	// `url_not_configured` — k8s will keep the pod out of rotation, which
+	// is the correct fail-closed behaviour for a misconfigured deploy.
+	HydraAdminURL  string
+	KratosAdminURL string
 }
 
 // NewRouter wires core middleware and health endpoints.
@@ -61,43 +72,18 @@ func NewRouter(opts Options) http.Handler {
 		),
 	)
 
-	r.Get(
-		"/health/live", func(w http.ResponseWriter, _ *http.Request) {
-			writeJSON(w, http.StatusOK, map[string]any{"status": "alive"})
-		},
-	)
+	// FR-036a — k8s liveness/readiness probes. `live` MUST NOT call out to
+	// any dep (a transient Hydra/Kratos blip would otherwise restart the
+	// pod). `ready` probes both admin planes with a uniform ≤500 ms
+	// timeout and caches the result for ≤2 s.
+	healthHandler := NewHealthHandler(HealthConfig{
+		Logger:         opts.Logger,
+		HydraAdminURL:  opts.HydraAdminURL,
+		KratosAdminURL: opts.KratosAdminURL,
+	})
 
-	r.Get(
-		"/health/ready", func(w http.ResponseWriter, r *http.Request) {
-			state := opts.Maintenance.Snapshot()
-			readiness := opts.Challenge.Readiness(r.Context())
-
-			payload := map[string]any{
-				"status":      readiness.Status,
-				"hydra":       readiness.Hydra,
-				"kratos":      readiness.Kratos,
-				"maintenance": state.Enabled,
-			}
-			if readiness.Version != "" {
-				payload["version"] = readiness.Version
-			}
-
-			statusCode := http.StatusOK
-			if readiness.Status != "ready" {
-				statusCode = http.StatusServiceUnavailable
-				payload["status"] = readiness.Status
-			}
-			if state.Enabled {
-				statusCode = http.StatusServiceUnavailable
-				payload["status"] = "maintenance"
-				if value := retryAfterHeader(state); value != "" {
-					w.Header().Set("Retry-After", value)
-				}
-			}
-
-			writeJSON(w, statusCode, payload)
-		},
-	)
+	r.Get("/health/live", healthHandler.ServeLive)
+	r.Get("/health/ready", maintenanceAwareReady(opts.Maintenance, healthHandler))
 
 	loginHandler := NewLoginHandler(
 		LoginHandlerConfig{
@@ -128,11 +114,74 @@ func NewRouter(opts Options) http.Handler {
 		)
 	}
 
+	logoutHandler := NewLogoutHandler(opts.Logger, opts.Challenge)
+	for _, path := range []string{"/v1/oidc/logout", "/oidc/logout"} {
+		route := path
+		r.Get(
+			route, func(w http.ResponseWriter, r *http.Request) {
+				logoutHandler.Handle(w, r)
+			},
+		)
+	}
+
 	if opts.WebhookHandler != nil {
 		r.Post("/webhooks/kratos/post-login", opts.WebhookHandler.PostLogin)
 	}
 
+	endSessionHandler := NewEndSessionHandlerWithConfig(mergeEndSessionConfig(opts))
+	for _, path := range []string{"/v1/oidc/end_session", "/oidc/end_session"} {
+		route := path
+		r.Get(route, endSessionHandler.ServeHTTP)
+	}
+
+	tokenHookHandler := NewTokenHookHandler(opts.Logger, opts.Audit, opts.RefreshResolver)
+	for _, path := range []string{"/v1/oidc/token-hook", "/oidc/token-hook"} {
+		route := path
+		r.Post(route, tokenHookHandler.ServeHTTP)
+	}
+
 	return r
+}
+
+// maintenanceAwareReady overlays the maintenance state on the readiness
+// probe — when the operator has flipped the service into maintenance, pull
+// the pod from rotation regardless of the upstream dep state. This is the
+// only way operators can drain traffic without stopping the pod.
+func maintenanceAwareReady(state *maintenance.State, healthHandler *HealthHandler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		snapshot := state.Snapshot()
+		if snapshot.Enabled {
+			if value := retryAfterHeader(snapshot); value != "" {
+				w.Header().Set("Retry-After", value)
+			}
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+				"status":      "maintenance",
+				"maintenance": true,
+			})
+			return
+		}
+		healthHandler.ServeReady(w, r)
+	}
+}
+
+// mergeEndSessionConfig resolves the end-session handler config: an explicit
+// opts.EndSessionConfig wins field-by-field, with nil/empty Logger, Audit and
+// PostLogoutAllowList backfilled from the top-level Options.
+func mergeEndSessionConfig(opts Options) EndSessionConfig {
+	cfg := EndSessionConfig{}
+	if opts.EndSessionConfig != nil {
+		cfg = *opts.EndSessionConfig
+	}
+	if cfg.Logger == nil {
+		cfg.Logger = opts.Logger
+	}
+	if cfg.Audit == nil {
+		cfg.Audit = opts.Audit
+	}
+	if len(cfg.PostLogoutAllowList) == 0 && len(opts.PostLogoutAllowList) > 0 {
+		cfg.PostLogoutAllowList = append([]string(nil), opts.PostLogoutAllowList...)
+	}
+	return cfg
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {

@@ -51,3 +51,15 @@ func (c *hydraOAuth2Client) AcceptConsentRequest(ctx context.Context, challengeI
 	req := c.api.AcceptOAuth2ConsentRequest(ctx).ConsentChallenge(challengeID).AcceptOAuth2ConsentRequest(*body)
 	return req.Execute()
 }
+
+// GetLogoutRequest fetches the logout challenge metadata from Hydra.
+func (c *hydraOAuth2Client) GetLogoutRequest(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2LogoutRequest, *http.Response, error) {
+	req := c.api.GetOAuth2LogoutRequest(ctx).LogoutChallenge(challengeID)
+	return req.Execute()
+}
+
+// AcceptLogoutRequest finalizes the logout challenge and returns Hydra's post-logout redirect.
+func (c *hydraOAuth2Client) AcceptLogoutRequest(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
+	req := c.api.AcceptOAuth2LogoutRequest(ctx).LogoutChallenge(challengeID)
+	return req.Execute()
+}

@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/alkem-io/oidc-service/internal/alkemio"
+	"github.com/alkem-io/oidc-service/internal/audit"
 	"github.com/alkem-io/oidc-service/internal/challenge"
 	"github.com/alkem-io/oidc-service/internal/config"
 	"github.com/alkem-io/oidc-service/internal/hydra"
@@ -263,13 +264,15 @@ func newChallengeService(
 	}
 
 	svc, err := challenge.NewService(challenge.Options{
-		Hydra:            hydraOAuthClient,
-		Identity:         challenge.NewIdentityMapper(ory.kratos.Admin().IdentityAPI),
-		Alkemio:          identityResolver,
-		HydraProbe:       hydraProbe,
-		KratosProbe:      kratosProbe,
-		ReadinessTimeout: cfg.ReadinessTimeout,
-		Logger:           challenge.NewZapLoggerAdapter(logger),
+		Hydra:               hydraOAuthClient,
+		Identity:            challenge.NewIdentityMapper(ory.kratos.Admin().IdentityAPI),
+		Alkemio:             identityResolver,
+		HydraProbe:          hydraProbe,
+		KratosProbe:         kratosProbe,
+		ReadinessTimeout:    cfg.ReadinessTimeout,
+		Logger:              challenge.NewZapLoggerAdapter(logger),
+		PreConsentClientIDs: cfg.PreConsentClientIDs,
+		Audit:               audit.NewEmitter(os.Stdout),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("configure challenge service: %w", err)
@@ -310,6 +313,8 @@ func newHTTPServer(
 		KratosBrowserURL:   cfg.KratosBrowserURL,
 		LoginReturnBaseURL: cfg.LoginReturnBaseURL,
 		WebhookHandler:     webhookHandler,
+		HydraAdminURL:      cfg.HydraAdminURL,
+		KratosAdminURL:     cfg.KratosAdminURL,
 	})
 
 	return &http.Server{

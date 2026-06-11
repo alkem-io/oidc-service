@@ -15,6 +15,8 @@ const (
 	FlowLogin FlowType = "login"
 	// FlowConsent represents the consent challenge flow.
 	FlowConsent FlowType = "consent"
+	// FlowLogout represents the logout challenge flow (Hydra-hosted UI invoked via urls.logout).
+	FlowLogout FlowType = "logout"
 )
 
 // Resolution captures the outcome of a challenge orchestration.
@@ -106,6 +108,9 @@ type Service interface {
 	ResolveLogin(ctx context.Context, challengeID string) (*Resolution, error)
 	// ResolveConsent completes the consent challenge.
 	ResolveConsent(ctx context.Context, challengeID string) (*Resolution, error)
+	// ResolveLogout completes the Hydra-hosted logout challenge by accepting it
+	// and returning the redirect URL Hydra wants the user-agent to follow next.
+	ResolveLogout(ctx context.Context, challengeID string) (*Resolution, error)
 	// Readiness checks the service health.
 	Readiness(ctx context.Context) ReadinessState
 }

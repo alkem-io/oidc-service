@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"net/http"
+	"regexp"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -18,6 +19,11 @@ const (
 	RequestIDHeader = "X-Request-Id"
 )
 
+// requestIDPattern enforces the [A-Za-z0-9\-_]{1,64} shape required by
+// specs/003-alkemio-oidc-idp task T014. Anything outside the pattern is
+// discarded and replaced with a freshly-minted UUIDv4.
+var requestIDPattern = regexp.MustCompile(`^[A-Za-z0-9\-_]{1,64}$`)
+
 // RequestContext ensures every request has a correlation ID and contextual logger.
 func RequestContext(base *zap.Logger) func(http.Handler) http.Handler {
 	if base == nil {
@@ -27,7 +33,7 @@ func RequestContext(base *zap.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			reqID := r.Header.Get(RequestIDHeader)
-			if reqID == "" {
+			if !requestIDPattern.MatchString(reqID) {
 				reqID = uuid.NewString()
 			}
 

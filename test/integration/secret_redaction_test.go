@@ -33,10 +33,20 @@ func TestSecretsRedactedFromLogsAndReadiness(t *testing.T) {
 	core, logs := observer.New(zap.InfoLevel)
 	logger := zap.New(core)
 
+	// Stub admin endpoints so the FR-036a readiness probe returns 200 — the
+	// purpose of this test is to assert no secret leaks INTO the readiness
+	// payload, not to exercise the dep-probe failure path.
+	stubAdmin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer stubAdmin.Close()
+
 	router := server.NewRouter(server.Options{
-		Logger:      logger,
-		Maintenance: maintenance.NewState(config.MaintenanceState{}),
-		Challenge:   svc,
+		Logger:         logger,
+		Maintenance:    maintenance.NewState(config.MaintenanceState{}),
+		Challenge:      svc,
+		HydraAdminURL:  stubAdmin.URL,
+		KratosAdminURL: stubAdmin.URL,
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/oidc/login?login_challenge=test", nil)
@@ -101,6 +111,10 @@ func (s *redactionChallengeService) ResolveLogin(_ context.Context, _ string) (*
 }
 
 func (s *redactionChallengeService) ResolveConsent(_ context.Context, _ string) (*challenge.Resolution, error) {
+	return &challenge.Resolution{RedirectURL: s.redirect}, nil
+}
+
+func (s *redactionChallengeService) ResolveLogout(_ context.Context, _ string) (*challenge.Resolution, error) {
 	return &challenge.Resolution{RedirectURL: s.redirect}, nil
 }
 

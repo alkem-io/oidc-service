@@ -80,6 +80,7 @@ func TestIDTokenClaimsIncludeActorID(t *testing.T) {
 	consent := hydraAdmin.NewOAuth2ConsentRequest(challengeID)
 	consent.SetSubject(contractKratosID)
 	consent.SetContext(map[string]any{"identity_id": contractKratosID})
+	consent.SetRequestedScope([]string{"openid", "profile", "email", "offline_access", "alkemio"})
 
 	var capturedID map[string]any
 

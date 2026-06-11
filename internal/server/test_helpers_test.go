@@ -10,6 +10,7 @@ import (
 type challengeServiceStub struct {
 	resolveLogin   func(ctx context.Context, challengeID string) (*challenge.Resolution, error)
 	resolveConsent func(ctx context.Context, challengeID string) (*challenge.Resolution, error)
+	resolveLogout  func(ctx context.Context, challengeID string) (*challenge.Resolution, error)
 	readiness      func(ctx context.Context) challenge.ReadinessState
 }
 
@@ -25,6 +26,13 @@ func (s *challengeServiceStub) ResolveConsent(ctx context.Context, challengeID s
 		return nil, challenge.NewError(http.StatusNotImplemented, "not_implemented", "resolve consent not implemented", challengeID, nil)
 	}
 	return s.resolveConsent(ctx, challengeID)
+}
+
+func (s *challengeServiceStub) ResolveLogout(ctx context.Context, challengeID string) (*challenge.Resolution, error) {
+	if s.resolveLogout == nil {
+		return nil, challenge.NewError(http.StatusNotImplemented, "not_implemented", "resolve logout not implemented", challengeID, nil)
+	}
+	return s.resolveLogout(ctx, challengeID)
 }
 
 func (s *challengeServiceStub) Readiness(ctx context.Context) challenge.ReadinessState {

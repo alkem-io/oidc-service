@@ -15,10 +15,11 @@ import (
 
 // TestPreConsentAutoAcceptForAllowListedClient — FR-030 (T030).
 // When the consent request's client_id is listed in PreConsentClientIDs, the
-// resolver MUST short-circuit: GrantScope == RequestedScope, AcceptConsent
-// called exactly once, Identity.Fetch NOT called (no profile render), and no
-// HTML UI is produced (service-level test — handler-level HTML check is
-// covered by T027a).
+// service MUST auto-accept without rendering any UI: GrantScope ==
+// RequestedScope and AcceptConsent called exactly once. Identity IS still
+// resolved so the consent session carries alkemio_actor_id/email claims —
+// without it the BFF cookie session lacks alkemio_actor_id and downstream
+// authorization treats the user as anonymous (FR-024a).
 func TestPreConsentAutoAcceptForAllowListedClient(t *testing.T) {
 	t.Parallel()
 
@@ -76,7 +77,14 @@ func TestPreConsentAutoAcceptForAllowListedClient(t *testing.T) {
 	require.NotNil(t, acceptedPayload, "AcceptConsentRequest must be called exactly once")
 	// FR-030 — GrantScope MUST equal RequestedScope on pre-consent auto-accept.
 	require.Equal(t, consent.GetRequestedScope(), acceptedPayload.GetGrantScope())
-	require.False(t, identityFetched, "pre-consent short-circuit MUST NOT fetch identity profile for UI render")
+	require.True(t, identityFetched, "pre-consent MUST still resolve identity to attach token claims")
+	// FR-024a — the alkemio scope is requested, so the consent session MUST
+	// carry alkemio_actor_id in both token claim maps.
+	session := acceptedPayload.GetSession()
+	idClaims, _ := session.GetIdToken().(map[string]any)
+	require.Equal(t, userID, idClaims["alkemio_actor_id"])
+	accessClaims, _ := session.GetAccessToken().(map[string]any)
+	require.Equal(t, userID, accessClaims["alkemio_actor_id"])
 }
 
 // TestPreConsentDoesNotApplyToUnlistedClient — a client NOT in

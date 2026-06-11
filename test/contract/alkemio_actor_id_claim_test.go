@@ -215,7 +215,7 @@ func TestConsentOmitsAlkemioClaimWhenScopeAbsent(t *testing.T) {
 	}
 
 	resolverStub := testsupport.AlkemioResolverStub{
-		ResolveFunc: func(_ context.Context, authenticationID string) (*alkemio.IdentityMapping, error) {
+		ResolveFunc: func(_ context.Context, _ string) (*alkemio.IdentityMapping, error) {
 			return testsupport.NewAlkemioMapping(contractUserID), nil
 		},
 	}

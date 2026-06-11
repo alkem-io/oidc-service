@@ -14,10 +14,11 @@ import (
 
 // TestACRAMRAbsence — FR-012 (T027d).
 // Three invariants against the live Hydra + oidc-service chain:
-//   (a) /oauth2/auth with acr_values=... completes without acr/amr in the id token
-//   (b) discovery claims_supported MUST NOT list acr/amr (or MAY be absent)
-//   (c) a client with no token_endpoint_auth_signing_alg override produces id
-//       tokens without acr/amr keys at all
+//
+//	(a) /oauth2/auth with acr_values=... completes without acr/amr in the id token
+//	(b) discovery claims_supported MUST NOT list acr/amr (or MAY be absent)
+//	(c) a client with no token_endpoint_auth_signing_alg override produces id
+//	    tokens without acr/amr keys at all
 //
 // Skips when HYDRA_PUBLIC_URL is not set AND when a valid id_token cannot be
 // obtained via `hydra perform authorization-code` (TEST_ID_TOKEN env var).
@@ -29,7 +30,7 @@ func TestDiscoveryClaimsSupportedDoesNotAdvertiseACROrAMR(t *testing.T) {
 		t.Skip("HYDRA_PUBLIC_URL not set; skipping ACR/AMR discovery contract test")
 	}
 
-	resp, err := http.Get(strings.TrimRight(public, "/") + "/.well-known/openid-configuration")
+	resp, err := http.Get(strings.TrimRight(public, "/") + "/.well-known/openid-configuration") //nolint:gosec // G704: target comes from HYDRA_PUBLIC_URL test env
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -96,12 +97,12 @@ func TestACRValuesIgnoredEndToEnd(t *testing.T) {
 	client := &http.Client{
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
 	}
-	resp, err := client.Get(strings.TrimRight(public, "/") + "/oauth2/auth?" + params.Encode())
+	resp, err := client.Get(strings.TrimRight(public, "/") + "/oauth2/auth?" + params.Encode()) //nolint:gosec // G704: target comes from HYDRA_PUBLIC_URL test env
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
 	// Hydra MUST NOT 4xx the request on acr_values alone — it's accepted as a
 	// no-op. This is a cheap "does not reject" smoke check; deeper id-token
 	// assertion lives in TestIDTokenDoesNotCarryACRAMRKeys.
-	require.True(t, resp.StatusCode < 400 || resp.StatusCode == http.StatusFound,
+	require.Less(t, resp.StatusCode, 400,
 		"acr_values MUST be accepted (and ignored), got %d", resp.StatusCode)
 }

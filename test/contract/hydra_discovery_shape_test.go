@@ -22,7 +22,7 @@ func TestHydraDiscoveryPosture(t *testing.T) {
 		t.Skip("HYDRA_PUBLIC_URL not set; skipping Hydra discovery contract test")
 	}
 
-	resp, err := http.Get(strings.TrimRight(public, "/") + "/.well-known/openid-configuration")
+	resp, err := http.Get(strings.TrimRight(public, "/") + "/.well-known/openid-configuration") //nolint:gosec // G704: target comes from HYDRA_PUBLIC_URL test env
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -68,7 +68,7 @@ func TestHydraDiscoveryPosture(t *testing.T) {
 	// JWKS Cache-Control — 1 day.
 	jwksURI, ok := doc["jwks_uri"].(string)
 	require.True(t, ok && jwksURI != "")
-	jwksResp, err := http.Get(jwksURI)
+	jwksResp, err := http.Get(jwksURI) //nolint:gosec // G107: jwks_uri comes from the trusted test Hydra discovery doc
 	require.NoError(t, err)
 	defer func() { _ = jwksResp.Body.Close() }()
 	jwksCache := strings.ToLower(jwksResp.Header.Get("Cache-Control"))

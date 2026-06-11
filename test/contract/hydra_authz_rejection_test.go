@@ -40,7 +40,7 @@ func TestHydraAuthzRejectionPaths(t *testing.T) {
 		params.Set("redirect_uri", "http://localhost:3000/api/auth/oidc/callback")
 		params.Set("scope", "openid")
 
-		resp, err := client.Get(base + "?" + params.Encode())
+		resp, err := client.Get(base + "?" + params.Encode()) //nolint:gosec // G704: target comes from HYDRA_PUBLIC_URL test env
 		require.NoError(t, err)
 		defer func() { _ = resp.Body.Close() }()
 		require.Contains(t, resp.Header.Get("Location")+resp.Status, "invalid_client",
@@ -57,7 +57,7 @@ func TestHydraAuthzRejectionPaths(t *testing.T) {
 		params.Set("code_challenge_method", "S256")
 		params.Set("code_challenge", "Fe3Bd7VOAVrgHDN-2xdGiaakY0P6WTCxlFQrLyhPBYI")
 
-		resp, err := client.Get(base + "?" + params.Encode())
+		resp, err := client.Get(base + "?" + params.Encode()) //nolint:gosec // G704: target comes from HYDRA_PUBLIC_URL test env
 		require.NoError(t, err)
 		defer func() { _ = resp.Body.Close() }()
 		combined := resp.Header.Get("Location") + resp.Status
@@ -75,7 +75,7 @@ func TestHydraAuthzRejectionPaths(t *testing.T) {
 		params.Set("code_challenge_method", "S256")
 		params.Set("code_challenge", "Fe3Bd7VOAVrgHDN-2xdGiaakY0P6WTCxlFQrLyhPBYI")
 
-		resp, err := client.Get(base + "?" + params.Encode())
+		resp, err := client.Get(base + "?" + params.Encode()) //nolint:gosec // G704: target comes from HYDRA_PUBLIC_URL test env
 		require.NoError(t, err)
 		defer func() { _ = resp.Body.Close() }()
 		require.Contains(t, resp.Header.Get("Location")+resp.Status, "invalid_scope")
@@ -91,7 +91,7 @@ func TestHydraAuthzRejectionPaths(t *testing.T) {
 		params.Set("code_challenge_method", "plain")
 		params.Set("code_challenge", "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGH")
 
-		resp, err := client.Get(base + "?" + params.Encode())
+		resp, err := client.Get(base + "?" + params.Encode()) //nolint:gosec // G704: target comes from HYDRA_PUBLIC_URL test env
 		require.NoError(t, err)
 		defer func() { _ = resp.Body.Close() }()
 		combined := resp.Header.Get("Location") + resp.Status

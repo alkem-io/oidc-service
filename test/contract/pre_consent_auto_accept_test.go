@@ -1,6 +1,7 @@
 package contract_test
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/alkem-io/oidc-service/internal/alkemio"
+	"github.com/alkem-io/oidc-service/internal/audit"
 	"github.com/alkem-io/oidc-service/internal/challenge"
 	testsupport "github.com/alkem-io/oidc-service/test/support"
 )
@@ -63,11 +65,13 @@ func TestPreConsentAutoAcceptForAllowListedClient(t *testing.T) {
 		},
 	}
 
+	var auditLog bytes.Buffer
 	svc, err := challenge.NewService(challenge.Options{
 		Hydra:               hydraStub,
 		Identity:            identityStub,
 		Alkemio:             resolverStub,
 		PreConsentClientIDs: []string{clientID},
+		Audit:               audit.NewEmitter(&auditLog),
 	})
 	require.NoError(t, err)
 
@@ -78,6 +82,10 @@ func TestPreConsentAutoAcceptForAllowListedClient(t *testing.T) {
 	// FR-030 — GrantScope MUST equal RequestedScope on pre-consent auto-accept.
 	require.Equal(t, consent.GetRequestedScope(), acceptedPayload.GetGrantScope())
 	require.True(t, identityFetched, "pre-consent MUST still resolve identity to attach token claims")
+	// The auto_accept audit event is what distinguishes the pre-consent
+	// short-circuit from the normal consent path (both accept in Hydra).
+	require.Contains(t, auditLog.String(), `"event_type":"consent.auto_accept"`,
+		"allow-listed client MUST take the pre-consent auto-accept path")
 	// FR-024a — the alkemio scope is requested, so the consent session MUST
 	// carry alkemio_actor_id in both token claim maps.
 	session := acceptedPayload.GetSession()
@@ -121,11 +129,13 @@ func TestPreConsentDoesNotApplyToUnlistedClient(t *testing.T) {
 		},
 	}
 
+	var auditLog bytes.Buffer
 	svc, err := challenge.NewService(challenge.Options{
 		Hydra:               hydraStub,
 		Identity:            identityStub,
 		Alkemio:             resolverStub,
 		PreConsentClientIDs: []string{"alkemio-web"}, // other client only; "third-party" not listed
+		Audit:               audit.NewEmitter(&auditLog),
 	})
 	require.NoError(t, err)
 
@@ -133,4 +143,8 @@ func TestPreConsentDoesNotApplyToUnlistedClient(t *testing.T) {
 	require.NoError(t, err)
 
 	require.True(t, identityFetched, "unlisted client MUST fall through and fetch identity")
+	// Both paths accept in Hydra; the absence of the auto_accept audit event
+	// proves the allow-list gate routed this client through the normal path.
+	require.NotContains(t, auditLog.String(), `"event_type":"consent.auto_accept"`,
+		"unlisted client MUST NOT take the pre-consent auto-accept path")
 }

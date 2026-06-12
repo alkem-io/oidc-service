@@ -48,6 +48,24 @@ linters:
         - name: error-strings    # Error strings should not be capitalized or end with punctuation
   exclusions:
     presets: []  # No default exclusions - we want all linter warnings
+    rules:
+      # G710 flags every http.Redirect with a non-literal target syntactically,
+      # validation notwithstanding (it even flags targets already checked
+      # against the registered post-logout allow-list). All handler redirects
+      # flow through the validated safeRedirect chokepoint in this one file,
+      # which rejects non-http(s) schemes and supports host pinning; the rest
+      # of the codebase must keep using safeRedirect, where G710 stays active.
+      - linters: [gosec]
+        path: internal/server/redirect\.go
+        text: "G710"
+      # G124 guards Secure/HttpOnly/SameSite attributes on Set-Cookie response
+      # headers. This service never sets response cookies (no http.SetCookie /
+      # Set-Cookie writes anywhere); it only attaches cookies to outgoing
+      # requests (e.g. the Kratos whoami call), where those attributes do not
+      # exist on the wire. Re-scope to specific paths if response cookies are
+      # ever introduced.
+      - linters: [gosec]
+        text: "G124"
 
 formatters:
   enable:

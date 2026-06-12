@@ -83,7 +83,7 @@ func (r *SessionResolver) IdentityID(ctx context.Context, sessionCookie string) 
 		return "", fmt.Errorf("create kratos whoami request: %w", err)
 	}
 
-	req.AddCookie(&http.Cookie{Name: r.cookieName, Value: cookieValue}) //nolint:gosec // G124: outgoing request cookie; Secure/HttpOnly/SameSite are response-only attributes
+	req.AddCookie(&http.Cookie{Name: r.cookieName, Value: cookieValue})
 
 	resp, err := r.client.Do(req)
 	if err != nil {

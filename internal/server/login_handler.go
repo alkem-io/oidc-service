@@ -123,7 +123,7 @@ func (h *LoginHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		zap.Duration("duration", time.Since(started)),
 	)
 
-	http.Redirect(w, r, redirectTo, http.StatusFound) //nolint:gosec // G710: redirect target comes from Hydra's accept response (trusted admin API), not raw user input
+	safeRedirect(w, r, redirectTo)
 }
 
 func (h *LoginHandler) attachIdentityHint(ctx context.Context, r *http.Request) context.Context {
@@ -205,7 +205,9 @@ func (h *LoginHandler) handleSessionRedirect(
 		"redirecting to kratos login", zap.String("challengeId", challengeID), zap.String("redirectTo", redirectURL),
 	)
 
-	http.Redirect(w, r, redirectURL, http.StatusFound) //nolint:gosec // G710: URL built from configured Kratos base URL, not raw user input
+	// buildKratosLoginRedirect succeeded, so kratosBrowserBase is non-nil and
+	// the target host is pinned to the configured Kratos browser base host.
+	safeRedirect(w, r, redirectURL, h.kratosBrowserBase.Host)
 	return true
 }
 

@@ -62,5 +62,5 @@ func (h *LogoutHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		zap.Duration("duration", time.Since(started)),
 	)
 
-	http.Redirect(w, r, resolution.RedirectURL, http.StatusFound) //nolint:gosec // G710: redirect target comes from Hydra's accept-logout response (trusted admin API), not raw user input
+	safeRedirect(w, r, resolution.RedirectURL)
 }

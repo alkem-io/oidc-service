@@ -62,5 +62,5 @@ func (h *ConsentHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		zap.Duration("duration", time.Since(started)),
 	)
 
-	http.Redirect(w, r, redirectTo, http.StatusFound)
+	http.Redirect(w, r, redirectTo, http.StatusFound) //nolint:gosec // G710: redirect target comes from Hydra's accept response (trusted admin API), not raw user input
 }

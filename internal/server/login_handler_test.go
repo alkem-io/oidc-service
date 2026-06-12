@@ -153,7 +153,7 @@ func TestLoginHandlerProvidesSessionHint(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, defaultLoginChallengePath, nil)
-	req.AddCookie(&http.Cookie{Name: "ory_kratos_session", Value: "session-token"})
+	req.AddCookie(&http.Cookie{Name: "ory_kratos_session", Value: "session-token"}) //nolint:gosec // G124: outgoing request cookie in test; attributes are response-only
 	rec := httptest.NewRecorder()
 
 	handler.Handle(rec, req)

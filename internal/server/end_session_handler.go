@@ -129,7 +129,7 @@ func (h *EndSessionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		},
 	)
 
-	http.Redirect(w, r, postLogout, http.StatusFound)
+	http.Redirect(w, r, postLogout, http.StatusFound) //nolint:gosec // G710: postLogout is validated against registered post-logout redirect URIs by allowedRedirect above
 }
 
 func (h *EndSessionHandler) allowedRedirect(uri string) bool {

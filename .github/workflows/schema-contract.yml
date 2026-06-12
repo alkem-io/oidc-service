@@ -9,38 +9,8 @@ on:
 
 jobs:
   lint-openapi:
-    runs-on: ubuntu-latest
+    uses: antst/alkemio-github-workflows/.github/workflows/contract-lint.yml@v1
     permissions:
       contents: read
-      pull-requests: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Lint OpenAPI contract
-        run: |
-          docker run --rm -v "${{ github.workspace }}/contracts:/spec" redocly/cli lint /spec/openapi.yaml
-
-      - name: Generate diff against base branch
-        if: github.event_name == 'pull_request'
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          if git fetch origin "$BASE_REF" --depth=1; then
-            mkdir -p tmp
-            if git show "origin/${BASE_REF}:contracts/openapi.yaml" > tmp/base-openapi.yaml 2>/dev/null; then
-              docker run --rm -v "${{ github.workspace }}:/work" redocly/cli diff /work/tmp/base-openapi.yaml /work/contracts/openapi.yaml || true
-            else
-              echo "Base branch ${BASE_REF} does not contain contracts/openapi.yaml; skipping diff"
-            fi
-          else
-            echo "Unable to fetch base ref $BASE_REF; skipping diff"
-          fi
-
-      - name: Attach contract artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: openapi-contract
-          path: contracts/openapi.yaml
+    with:
+      contract-path: contracts/openapi.yaml

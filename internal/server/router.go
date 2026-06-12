@@ -58,7 +58,6 @@ func NewRouter(opts Options) http.Handler {
 		opts.Challenge = challenge.NewStubService()
 	}
 	r := chi.NewRouter()
-	r.Use(chiMiddleware.RealIP)
 	r.Use(chiMiddleware.Recoverer)
 	r.Use(middlewarepkg.RequestContext(opts.Logger))
 	r.Use(

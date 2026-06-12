@@ -58,7 +58,7 @@ This document provides essential guidance for AI coding assistants working on th
 
 - **Language**: Go 1.25
 - **Database**: PostgreSQL (Alkemio database)
-- **New dependencies** (006-db-claims-lookup): pgx v5.8.0, sqlc v1.30.0
+- **New dependencies** (006-db-claims-lookup): pgx v5.10.0, sqlc v1.30.0
 
 ## Architecture Quick Reference
 

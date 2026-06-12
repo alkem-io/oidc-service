@@ -19,7 +19,7 @@ All tasks completed successfully. Tests pass, build compiles.
 ## Task Details
 
 ### Phase 1: Setup
-- [x] T001 Add pgx v5.8.0 dependency
+- [x] T001 Add pgx v5 dependency
 - [x] T002 Create SQLC config (`sqlc.yaml`)
 - [x] T003 Create SQL queries (`internal/alkemio/queries/queries.sql`)
 - [x] T004 Run SQLC code generation

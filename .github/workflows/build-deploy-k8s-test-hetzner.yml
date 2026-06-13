@@ -50,7 +50,7 @@ jobs:
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Apply configmap and service
-        run: kubectl apply -f deployments/kubernetes/configmap.yaml -f deployments/kubernetes/service.yaml
+        run: kubectl apply -f manifests/20-oidc-service-configmap.yaml -f manifests/30-oidc-service-service.yaml
 
       - name: Patch image pull secret
         run: |

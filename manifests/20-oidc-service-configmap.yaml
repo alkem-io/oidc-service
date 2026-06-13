@@ -3,8 +3,7 @@ kind: ConfigMap
 metadata:
   name: oidc-service-config
   labels:
-    app.kubernetes.io/name: oidc-service
-    app.kubernetes.io/part-of: alkemio-platform
+    app: oidc-service
 data:
   OIDC_HYDRA_ADMIN_URL: https://hydra-admin.example
   OIDC_KRATOS_ADMIN_URL: https://kratos-admin.example

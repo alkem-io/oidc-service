@@ -62,5 +62,5 @@ func (h *ConsentHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		zap.Duration("duration", time.Since(started)),
 	)
 
-	http.Redirect(w, r, redirectTo, http.StatusFound)
+	safeRedirect(w, r, redirectTo)
 }

@@ -129,7 +129,9 @@ func (h *EndSessionHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		},
 	)
 
-	http.Redirect(w, r, postLogout, http.StatusFound)
+	// postLogout already passed the exact-match registered-URI allow-list
+	// check (allowedRedirect); safeRedirect re-applies the scheme policy.
+	safeRedirect(w, r, postLogout)
 }
 
 func (h *EndSessionHandler) allowedRedirect(uri string) bool {

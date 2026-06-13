@@ -36,6 +36,10 @@ import (
 // Accepted targets are answered with 302 Found, the status every challenge
 // flow in this package uses.
 func safeRedirect(w http.ResponseWriter, r *http.Request, target string, allowedHosts ...string) {
+	// Normalize once so the value we validate is exactly the value we emit:
+	// a target like " https://host/path " must not pass validation in its
+	// trimmed form and then leak whitespace into the Location header.
+	target = strings.TrimSpace(target)
 	if !redirectTargetAllowed(target, allowedHosts) {
 		middlewarepkg.Logger(r.Context()).Warn(
 			"rejected unsafe redirect target",
@@ -62,8 +66,11 @@ func redirectTargetAllowed(target string, allowedHosts []string) bool {
 	}
 
 	if parsed.Scheme == "" && parsed.Host == "" {
-		// Relative path on this service's own origin.
-		return true
+		// Relative path on this service's own origin. Only safe when no host
+		// pinning is required — when allowedHosts is set, a relative target
+		// would bypass the pin, so fail closed and require an absolute,
+		// host-matched target instead.
+		return len(allowedHosts) == 0
 	}
 
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {

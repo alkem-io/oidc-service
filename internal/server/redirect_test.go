@@ -48,6 +48,12 @@ func TestRedirectTargetAllowed(t *testing.T) {
 			allowedHosts: []string{"kratos.example"},
 			want:         false,
 		},
+		{
+			name:         "relative target rejected when host pinning required",
+			target:       "/self-service/login/browser",
+			allowedHosts: []string{"kratos.example"},
+			want:         false,
+		},
 	}
 
 	for _, tc := range cases {
@@ -62,6 +68,16 @@ func TestSafeRedirectAllowsValidTarget(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/oidc/login", nil)
 
 	safeRedirect(rec, req, "https://hydra.example/oauth2/auth")
+
+	require.Equal(t, http.StatusFound, rec.Code)
+	require.Equal(t, "https://hydra.example/oauth2/auth", rec.Header().Get("Location"))
+}
+
+func TestSafeRedirectEmitsTrimmedTarget(t *testing.T) {
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/oidc/login", nil)
+
+	safeRedirect(rec, req, "  https://hydra.example/oauth2/auth  ")
 
 	require.Equal(t, http.StatusFound, rec.Code)
 	require.Equal(t, "https://hydra.example/oauth2/auth", rec.Header().Get("Location"))

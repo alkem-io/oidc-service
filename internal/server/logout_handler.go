@@ -62,5 +62,5 @@ func (h *LogoutHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		zap.Duration("duration", time.Since(started)),
 	)
 
-	http.Redirect(w, r, resolution.RedirectURL, http.StatusFound)
+	safeRedirect(w, r, resolution.RedirectURL)
 }

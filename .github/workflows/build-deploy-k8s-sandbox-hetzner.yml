@@ -15,9 +15,11 @@ jobs:
       # match the defaults.)
       deployment-name: oidc-service
       container-name: oidc-service
+      # Service + ConfigMap moved to manifests/ (PR #25). This PR must merge
+      # AFTER #25 so the referenced files exist on develop.
       extra-manifests: |
-        deployments/kubernetes/configmap.yaml
-        deployments/kubernetes/service.yaml
+        manifests/20-oidc-service-configmap.yaml
+        manifests/30-oidc-service-service.yaml
     secrets:
       KUBECONFIG: ${{ secrets.KUBECONFIG_SECRET_HETZNER_SANDBOX }}
       REGISTRY_LOGIN_SERVER: ${{ secrets.REGISTRY_LOGIN_SERVER }}

@@ -50,9 +50,6 @@ jobs:
             --docker-password=${{ secrets.REGISTRY_PASSWORD }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Apply configmap and service
-        run: kubectl apply -f manifests/20-oidc-service-configmap.yaml -f manifests/30-oidc-service-service.yaml
-
       - name: Patch image pull secret
         run: |
           kubectl patch deployment oidc-service -p '{"spec":{"template":{"spec":{"imagePullSecrets":[{"name":"oidc-service-registry"}]}}}}'

@@ -9,7 +9,7 @@ on:
 
 jobs:
   lint-openapi:
-    uses: antst/alkemio-github-workflows/.github/workflows/contract-lint.yml@v1
+    uses: alkem-io/github-workflows/.github/workflows/contract-lint.yml@v1
     permissions:
       contents: read
     with:

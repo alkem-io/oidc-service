@@ -112,7 +112,8 @@ def smoke(image):
         return cid
 
     def port(cid, container_port):
-        return "http://" + docker("port", cid, container_port)
+        address = json.loads(docker("inspect", cid))[0]["NetworkSettings"]["Networks"][names["network"]]["IPAddress"]
+        return "http://" + address + ":" + container_port.split("/")[0]
 
     if docker("context", "inspect", "--format", "{{.Endpoints.docker.Host}}") != "unix:///var/run/docker.sock":
         raise RuntimeError("only the default local Unix Docker endpoint is allowed")
@@ -122,14 +123,14 @@ def smoke(image):
         if any(value in rows for value in names.values()):
             raise RuntimeError("resource name collision")
     planned = {"names": names, "images": [image, fixture_image, postgres_image],
-               "ports": "Docker-assigned loopback ports only", "storage": "fresh named PostgreSQL volume",
+               "ports": "No published host ports; host connects directly to fresh internal bridge addresses", "storage": "fresh named PostgreSQL volume",
                "mounts": [str(Path(__file__).resolve())], "created": created}
     (evidence / "resources.json").write_text(json.dumps(planned, indent=2))
     try:
         created["networks"].append(docker("network", "create", "--internal", names["network"]))
         docker("volume", "create", names["volume"])
         created["volumes"].append(names["volume"])
-        fixture_id = run_container("fixture", "--network-alias", "fixture", "-p", "127.0.0.1::8081",
+        fixture_id = run_container("fixture", "--network-alias", "fixture",
                                    "-v", str(Path(__file__).resolve()) + ":/fixture.py:ro", fixture_image,
                                    "python3", "/fixture.py", "--fixture")
         db = run_container("database", "--network-alias", "database", "-e", "POSTGRES_PASSWORD=synthetic-only",
@@ -146,7 +147,7 @@ def smoke(image):
                "DATABASE_PASSWORD": "synthetic-only", "DATABASE_NAME": "oidc"}
 
         def service(kind, maintenance=False):
-            args = ["-p", "127.0.0.1::8080"]
+            args = []
             for key, value in env.items():
                 args.extend(["-e", "OIDC_" + key + "=" + value])
             if maintenance:

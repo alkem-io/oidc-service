@@ -16,13 +16,14 @@ ACTOR = "1bcf5bd1-5f3e-4f01-9125-0edc93e5f5b1"
 
 
 def fixture():
-    captured = {"login": [], "consent": [], "whoami": 0, "api": 0}
+    captured = {"login": [], "consent": [], "whoami": 0, "api": 0, "requests": []}
 
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
             path = urllib.parse.urlparse(self.path).path
             if path == "/assertions":
                 return self.reply(captured)
+            captured["requests"].append({"method": "GET", "path": path})
             if path in ("/health/ready", "/admin/health/ready", "/health/alive", "/admin/health/alive", "/version"):
                 return self.reply({"status": "ok", "version": "synthetic"})
             if path == "/sessions/whoami":
@@ -45,6 +46,7 @@ def fixture():
             return self.reply({"error": "unexpected fixture path", "path": path}, 500)
 
         def do_PUT(self):
+            captured["requests"].append({"method": "PUT", "path": self.path})
             payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
             path = urllib.parse.urlparse(self.path).path
             if path == "/admin/oauth2/auth/requests/login/accept":
@@ -56,6 +58,7 @@ def fixture():
             return self.reply({"redirect_to": "http://fixture:8081/callback"})
 
         def do_POST(self):
+            captured["requests"].append({"method": "POST", "path": self.path})
             captured["api"] += 1
             self.reply({"error": "database hit must not call API fallback"}, 500)
 

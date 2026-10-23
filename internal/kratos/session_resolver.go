@@ -85,6 +85,7 @@ func (r *SessionResolver) IdentityID(ctx context.Context, sessionCookie string) 
 
 	req.AddCookie(&http.Cookie{Name: r.cookieName, Value: cookieValue})
 
+	// #nosec G704 -- The destination is the operator-configured Kratos URL; the session cookie is only a request header.
 	resp, err := r.client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("kratos whoami request failed: %w", err)

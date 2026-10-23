@@ -15,7 +15,7 @@ const defaultTimeout = 10 * time.Second
 // Config captures the settings required to communicate with Hydra's Admin API.
 type Config struct {
 	AdminURL  string
-	AuthToken string
+	AuthToken string `json:"-"`
 	Timeout   time.Duration
 }
 

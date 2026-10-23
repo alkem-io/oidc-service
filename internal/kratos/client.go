@@ -15,7 +15,7 @@ const defaultTimeout = 10 * time.Second
 // Config defines the parameters required to talk to Kratos' Admin API.
 type Config struct {
 	AdminURL  string
-	AuthToken string
+	AuthToken string `json:"-"`
 	Timeout   time.Duration
 }
 

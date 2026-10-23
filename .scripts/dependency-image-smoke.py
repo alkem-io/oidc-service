@@ -23,7 +23,7 @@ def fixture():
             path = urllib.parse.urlparse(self.path).path
             if path == "/assertions":
                 return self.reply(captured)
-            if path in ("/health/ready", "/admin/health/ready", "/version"):
+            if path in ("/health/ready", "/admin/health/ready", "/health/alive", "/admin/health/alive", "/version"):
                 return self.reply({"status": "ok", "version": "synthetic"})
             if path == "/sessions/whoami":
                 captured["whoami"] += 1
@@ -38,7 +38,7 @@ def fixture():
                 challenge = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("login_challenge", [""])[0]
                 if challenge == "reject":
                     return self.reply({"error": "invalid_request", "error_description": "synthetic rejection"}, 404)
-                return self.reply({"challenge": challenge, "skip": False, "subject": "", "client": {"client_id": "synthetic"}})
+                return self.reply({"challenge": challenge, "request_url": "http://fixture:8081/authorize", "skip": False, "subject": "", "client": {"client_id": "synthetic"}})
             if path == "/admin/oauth2/auth/requests/consent":
                 return self.reply({"challenge": "consent", "subject": IDENTITY, "context": {"identity_id": IDENTITY},
                                    "requested_scope": ["openid", "profile", "email", "alkemio"], "client": {"client_id": "synthetic"}})
@@ -82,6 +82,7 @@ def smoke(image):
     names = {kind: prefix + "-" + kind for kind in ("network", "volume", "fixture", "database", "service", "maintenance")}
     created = {"containers": [], "networks": [], "volumes": []}
     result = {"image": image, "pass": False, "checks": [], "cleanup": []}
+    urllib.request.install_opener(urllib.request.build_opener(urllib.request.ProxyHandler({})))
 
     def docker(*args, input=None):
         return subprocess.check_output(["docker", *args], input=input, text=True, stderr=subprocess.STDOUT).strip()
@@ -106,9 +107,10 @@ def smoke(image):
         raise RuntimeError("fresh fixture did not become ready")
 
     def run_container(kind, *args):
-        cid = docker("run", "-d", "--name", names[kind], "--network", names["network"], *args)
+        cid = docker("create", "--name", names[kind], "--network", names["network"], *args)
         created["containers"].append(cid)
         (evidence / "created.json").write_text(json.dumps(created, indent=2))
+        docker("start", cid)
         return cid
 
     def port(cid, container_port):
@@ -122,20 +124,22 @@ def smoke(image):
         (evidence / (resource + "-before.jsonl")).write_text(rows)
         if any(value in rows for value in names.values()):
             raise RuntimeError("resource name collision")
+    staged_fixture = evidence / "fixture.py"
+    staged_fixture.write_text(Path(__file__).read_text())
     planned = {"names": names, "images": [image, fixture_image, postgres_image],
                "ports": "No published host ports; host connects directly to fresh internal bridge addresses", "storage": "fresh named PostgreSQL volume",
-               "mounts": [str(Path(__file__).resolve())], "created": created}
+               "mounts": [str(staged_fixture)], "created": created}
     (evidence / "resources.json").write_text(json.dumps(planned, indent=2))
     try:
         created["networks"].append(docker("network", "create", "--internal", names["network"]))
         docker("volume", "create", names["volume"])
         created["volumes"].append(names["volume"])
         fixture_id = run_container("fixture", "--network-alias", "fixture",
-                                   "-v", str(Path(__file__).resolve()) + ":/fixture.py:ro", fixture_image,
-                                   "python3", "/fixture.py", "--fixture")
+                                   "-v", str(staged_fixture) + ":/fixture.py:ro", fixture_image,
+                                   "python3", "-I", "/fixture.py", "--fixture")
         db = run_container("database", "--network-alias", "database", "-e", "POSTGRES_PASSWORD=synthetic-only",
                            "-e", "POSTGRES_USER=oidc", "-e", "POSTGRES_DB=oidc", "-v", names["volume"] + ":/var/lib/postgresql/data", postgres_image)
-        wait_ready(lambda: docker("exec", db, "pg_isready", "-U", "oidc", "-d", "oidc").endswith("accepting connections"))
+        wait_ready(lambda: docker("exec", db, "pg_isready", "-h", "127.0.0.1", "-U", "oidc", "-d", "oidc").endswith("accepting connections"))
         sql = 'CREATE TABLE "user" (id uuid PRIMARY KEY, "authenticationID" uuid UNIQUE NOT NULL);\n'
         sql += f'INSERT INTO "user" VALUES (\'{ACTOR}\', \'{IDENTITY}\');\n'
         docker("exec", "-i", db, "psql", "-v", "ON_ERROR_STOP=1", "-U", "oidc", "-d", "oidc", input=sql)
@@ -162,7 +166,7 @@ def smoke(image):
         class NoRedirect(urllib.request.HTTPRedirectHandler):
             def redirect_request(self, req, fp, code, msg, headers, newurl):
                 return None
-        urllib.request.install_opener(urllib.request.build_opener(NoRedirect))
+        urllib.request.install_opener(urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect))
         assert request(base, "/health/ready")[0] == 200
         status, headers, _ = request(base, "/v1/oidc/login?login_challenge=login", "ory_kratos_session=synthetic-session")
         assert status == 302 and headers.get("Location") == "http://fixture:8081/callback", (status, headers)
@@ -186,18 +190,33 @@ def smoke(image):
         result["fixture_assertions"] = state
         result["pass"] = True
     finally:
+        cleanup_errors = []
         for cid in reversed(created["containers"]):
-            (evidence / (cid + ".log")).write_text(docker("logs", cid))
-            docker("rm", "-f", cid)
-            result["cleanup"].append({"container": cid, "removed": True})
-        for volume in created["volumes"]:
-            docker("volume", "rm", volume)
-            result["cleanup"].append({"volume": volume, "removed": True})
-        for network in created["networks"]:
-            docker("network", "rm", network)
-            result["cleanup"].append({"network": network, "removed": True})
+            try:
+                (evidence / (cid + ".inspect.json")).write_text(docker("inspect", cid))
+                (evidence / (cid + ".log")).write_text(docker("logs", cid))
+            except subprocess.CalledProcessError as error:
+                cleanup_errors.append(str(error))
+            try:
+                docker("rm", "-f", cid)
+                result["cleanup"].append({"container": cid, "removed": True})
+            except subprocess.CalledProcessError as error:
+                cleanup_errors.append(str(error))
+        for kind, command in (("volumes", "volume"), ("networks", "network")):
+            for resource in created[kind]:
+                try:
+                    docker(command, "rm", resource)
+                    result["cleanup"].append({command: resource, "removed": True})
+                except subprocess.CalledProcessError as error:
+                    cleanup_errors.append(str(error))
+        result["cleanup_errors"] = cleanup_errors
+        if cleanup_errors:
+            result["pass"] = False
         (evidence / "created.json").write_text(json.dumps(created, indent=2))
         (evidence / "smoke-result.json").write_text(json.dumps(result, indent=2))
+        if cleanup_errors:
+            raise RuntimeError("fixture cleanup or evidence capture failed: " + str(cleanup_errors))
+
 
 
 if __name__ == "__main__":

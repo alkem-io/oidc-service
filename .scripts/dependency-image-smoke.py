@@ -88,7 +88,14 @@ def smoke(image):
     urllib.request.install_opener(urllib.request.build_opener(urllib.request.ProxyHandler({})))
 
     def docker(*args, input=None):
-        return subprocess.check_output(["docker", *args], input=input, text=True, stderr=subprocess.STDOUT).strip()
+        # Parsed output (container IDs, JSON) comes from stdout alone; stderr is kept as diagnostics.
+        process = subprocess.run(["docker", *args], input=input, text=True, capture_output=True)
+        if process.stderr:
+            with (evidence / "docker-stderr.log").open("a") as log:
+                log.write(json.dumps(args) + "\n" + process.stderr + "\n")
+        if process.returncode:
+            raise subprocess.CalledProcessError(process.returncode, process.args, process.stdout, process.stderr)
+        return process.stdout.strip()
 
     def request(base, path, cookie=None):
         req = urllib.request.Request(base + path, headers={"Cookie": cookie} if cookie else {})

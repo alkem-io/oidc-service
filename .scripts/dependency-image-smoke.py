@@ -204,7 +204,7 @@ def smoke(image):
         for cid in reversed(created["containers"]):
             try:
                 (evidence / (cid + ".inspect.json")).write_text(docker("inspect", cid))
-                (evidence / (cid + ".log")).write_text(docker("logs", cid))
+                (evidence / (cid + ".log")).write_text(subprocess.run(["docker", "logs", cid], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, check=True).stdout)
             except subprocess.CalledProcessError as error:
                 cleanup_errors.append(str(error))
             try:

@@ -37,6 +37,15 @@ func (c *hydraOAuth2Client) AcceptLoginRequest(ctx context.Context, challengeID 
 	return req.Execute()
 }
 
+// RejectLoginRequest ends the login challenge with the supplied error and returns Hydra's redirect to the client.
+func (c *hydraOAuth2Client) RejectLoginRequest(ctx context.Context, challengeID string, body *hydraAdmin.RejectOAuth2Request) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
+	if body == nil {
+		return nil, nil, fmt.Errorf("reject login request body is required")
+	}
+	req := c.api.RejectOAuth2LoginRequest(ctx).LoginChallenge(challengeID).RejectOAuth2Request(*body)
+	return req.Execute()
+}
+
 // GetConsentRequest fetches the consent challenge metadata from Hydra.
 func (c *hydraOAuth2Client) GetConsentRequest(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
 	req := c.api.GetOAuth2ConsentRequest(ctx).ConsentChallenge(challengeID)

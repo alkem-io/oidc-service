@@ -15,6 +15,7 @@ import (
 type HydraClientStub struct {
 	GetLoginFunc      func(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2LoginRequest, *http.Response, error)
 	AcceptLoginFunc   func(ctx context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2LoginRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error)
+	RejectLoginFunc   func(ctx context.Context, challengeID string, body *hydraAdmin.RejectOAuth2Request) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error)
 	GetConsentFunc    func(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error)
 	AcceptConsentFunc func(ctx context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2ConsentRequest) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error)
 	GetLogoutFunc     func(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2LogoutRequest, *http.Response, error)
@@ -35,6 +36,14 @@ func (s *HydraClientStub) AcceptLoginRequest(ctx context.Context, challengeID st
 		return nil, nil, errors.New("accept login request not stubbed")
 	}
 	return s.AcceptLoginFunc(ctx, challengeID, body)
+}
+
+// RejectLoginRequest executes the configured stub for Hydra login rejection.
+func (s *HydraClientStub) RejectLoginRequest(ctx context.Context, challengeID string, body *hydraAdmin.RejectOAuth2Request) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
+	if s == nil || s.RejectLoginFunc == nil {
+		return nil, nil, errors.New("reject login request not stubbed")
+	}
+	return s.RejectLoginFunc(ctx, challengeID, body)
 }
 
 // GetConsentRequest executes the configured stub for Hydra consent lookups.

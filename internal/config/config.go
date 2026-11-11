@@ -23,7 +23,7 @@ type ServiceConfig struct {
 	LoginReturnBaseURL  string        `envconfig:"LOGIN_RETURN_BASE_URL"`
 	WebBaseURL          string        `envconfig:"WEB_BASE_URL"`
 	KratosSessionCookie string        `envconfig:"KRATOS_SESSION_COOKIE" default:"ory_kratos_session"`
-	AuthToken           string        `envconfig:"ADMIN_TOKEN"`
+	AuthToken           string        `envconfig:"ADMIN_TOKEN" json:"-"`
 	MaintenanceMode     bool          `envconfig:"MAINTENANCE_MODE" default:"false"`
 	RetryAfterSeconds   int           `envconfig:"MAINTENANCE_RETRY" default:"0"`
 	AllowInsecureHTTP   bool          `envconfig:"ALLOW_INSECURE_HTTP" default:"false"`

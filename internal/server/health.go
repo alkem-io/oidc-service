@@ -225,6 +225,7 @@ func (h *HealthHandler) probeURL(ctx context.Context, baseURL, path, errorCode s
 	}
 	req.Header.Set("Accept", "application/json")
 
+	// #nosec G704 -- The destination is the operator-configured admin URL plus a fixed health path.
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
 		return CheckResult{Status: checkStatusUnhealthy, Error: errorCode}

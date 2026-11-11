@@ -62,6 +62,7 @@ func (p *httpReadinessProbe) Ready(ctx context.Context) error {
 		req.Header.Set("Authorization", "Bearer "+p.token)
 	}
 
+	// #nosec G704 -- The destination is the operator-configured admin URL plus a fixed readiness or version path.
 	resp, err := p.client.Do(req)
 	if err != nil {
 		return err
@@ -92,6 +93,7 @@ func (p *httpReadinessProbe) Version(ctx context.Context) (string, error) {
 		req.Header.Set("Authorization", "Bearer "+p.token)
 	}
 
+	// #nosec G704 -- The destination is the operator-configured admin URL plus a fixed readiness or version path.
 	resp, err := p.client.Do(req)
 	if err != nil {
 		return "", err

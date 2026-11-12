@@ -75,7 +75,7 @@ type Options struct {
 	PreConsentClientIDs []string
 
 	// Audit, when non-nil, receives a `consent.auto_accept` event whenever the
-	// pre-consent filter short-circuits the consent flow (FR-030 / FR-035), and a
+	// pre-consent filter short-circuits the consent flow, and a
 	// `login.remembered_reject` event whenever a remembered login is refused.
 	// Optional — production wires the stdout emitter; tests may leave it nil.
 	Audit *audit.Emitter
@@ -266,6 +266,7 @@ func (s *service) rejectRememberedLogin(
 	s.logger.Info(
 		"rejecting remembered login whose subject differs from the live kratos session",
 		"challenge_id", challengeID,
+		"correlation_id", correlationIDFromContext(ctx),
 		"hydra_subject", maskIdentityID(hydraSubject),
 		"identity_id", maskIdentityID(sessionIdentityID),
 	)
@@ -282,22 +283,23 @@ func (s *service) rejectRememberedLogin(
 		return nil, mapHydraError(FlowLogin, challengeID, resp, err)
 	}
 
-	s.emitRememberedLoginRejectAudit(req)
+	s.emitRememberedLoginRejectAudit(ctx, req)
 
 	return resolutionFromRedirect(challengeID, redirect)
 }
 
-func (s *service) emitRememberedLoginRejectAudit(req *hydraAdmin.OAuth2LoginRequest) {
+func (s *service) emitRememberedLoginRejectAudit(ctx context.Context, req *hydraAdmin.OAuth2LoginRequest) {
 	if s.audit == nil {
 		return
 	}
 	client := req.GetClient()
 	if err := s.audit.Emit(audit.Event{
-		EventType: "login.remembered_reject",
-		Outcome:   audit.OutcomeFailure,
-		Sub:       strings.TrimSpace(req.GetSubject()),
-		ClientID:  strings.TrimSpace(client.GetClientId()),
-		ErrorCode: "login_required",
+		EventType:     "login.remembered_reject",
+		Outcome:       audit.OutcomeFailure,
+		Sub:           strings.TrimSpace(req.GetSubject()),
+		ClientID:      strings.TrimSpace(client.GetClientId()),
+		CorrelationID: correlationIDFromContext(ctx),
+		ErrorCode:     "login_required",
 	}); err != nil {
 		s.logger.Warn("emit login.remembered_reject audit failed", "error", err)
 	}

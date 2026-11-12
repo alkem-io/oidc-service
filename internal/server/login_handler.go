@@ -98,7 +98,7 @@ func (h *LoginHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := h.attachIdentityHint(r.Context(), r)
+	ctx := challenge.WithCorrelationID(h.attachIdentityHint(r.Context(), r), CorrelationID(r.Context()))
 
 	resolution, err := h.service.ResolveLogin(ctx, challengeID)
 	if err != nil {

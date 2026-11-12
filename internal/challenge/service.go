@@ -287,12 +287,14 @@ func (s *service) rejectRememberedLogin(
 		return nil, mapHydraError(FlowLogin, challengeID, resp, err)
 	}
 
-	s.emitRememberedLoginRejectAudit(ctx, req)
+	s.emitRememberedLoginRejectAudit(ctx, req, sessionIdentityID)
 
 	return resolutionFromRedirect(challengeID, redirect)
 }
 
-func (s *service) emitRememberedLoginRejectAudit(ctx context.Context, req *hydraAdmin.OAuth2LoginRequest) {
+func (s *service) emitRememberedLoginRejectAudit(
+	ctx context.Context, req *hydraAdmin.OAuth2LoginRequest, sessionIdentityID string,
+) {
 	if s.audit == nil {
 		return
 	}
@@ -301,6 +303,7 @@ func (s *service) emitRememberedLoginRejectAudit(ctx context.Context, req *hydra
 		EventType:     "login.remembered_reject",
 		Outcome:       audit.OutcomeFailure,
 		Sub:           strings.TrimSpace(req.GetSubject()),
+		ActorID:       sessionIdentityID,
 		ClientID:      strings.TrimSpace(client.GetClientId()),
 		CorrelationID: requestid.FromContext(ctx),
 		ErrorCode:     "login_required",

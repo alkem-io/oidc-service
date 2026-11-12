@@ -173,6 +173,7 @@ func TestResolveLoginSkipRejectsWhenSessionIdentityDiffers(t *testing.T) {
 			require.Equal(t, "login.remembered_reject", event.EventType)
 			require.Equal(t, audit.OutcomeFailure, event.Outcome)
 			require.Equal(t, hydraSubject, event.Sub)
+			require.Equal(t, kratosHintSubjectID, event.ActorID)
 			require.Equal(t, "synapse-client", event.ClientID)
 			require.Equal(t, "req-remembered-reject", event.CorrelationID)
 			require.Equal(t, "login_required", event.ErrorCode)

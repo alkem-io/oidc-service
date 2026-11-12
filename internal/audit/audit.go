@@ -30,6 +30,8 @@ type Event struct {
 	EventType      string  `json:"event_type"`
 	Outcome        Outcome `json:"outcome"`
 	Sub            string  `json:"sub,omitempty"`
+	// ActorID is the identity of the live session that acted, set when it differs from Sub.
+	ActorID        string  `json:"actor_id,omitempty"`
 	ClientID       string  `json:"client_id,omitempty"`
 	CorrelationID  string  `json:"correlation_id"`
 	RequestID      string  `json:"request_id"`

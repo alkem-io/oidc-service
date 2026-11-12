@@ -15,6 +15,7 @@ import (
 
 	"github.com/alkem-io/oidc-service/internal/alkemio"
 	"github.com/alkem-io/oidc-service/internal/audit"
+	"github.com/alkem-io/oidc-service/internal/requestid"
 )
 
 const (
@@ -160,7 +161,7 @@ func TestResolveLoginSkipRejectsWhenSessionIdentityDiffers(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			ctx := WithCorrelationID(withSession(kratosHintSubjectID, "aal1"), "req-remembered-reject")
+			ctx := requestid.With(withSession(kratosHintSubjectID, "aal1"), "req-remembered-reject")
 			resolution, err := svc.ResolveLogin(ctx, loginChallengeID)
 			require.NoError(t, err)
 			require.Equal(t, rejectRedirect, resolution.RedirectURL)

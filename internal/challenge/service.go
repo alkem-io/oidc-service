@@ -14,6 +14,7 @@ import (
 
 	"github.com/alkem-io/oidc-service/internal/alkemio"
 	"github.com/alkem-io/oidc-service/internal/audit"
+	"github.com/alkem-io/oidc-service/internal/requestid"
 )
 
 const (
@@ -246,7 +247,10 @@ func (s *service) resolveLoginSkip(
 	payload.SetRemember(true)
 	payload.SetRememberFor(s.rememberFor)
 	payload.SetAcr(assurance.AAL)
-	payload.SetContext(ensureLoginContextAssurance(readLoginContext(req), assurance))
+	payload.SetContext(map[string]any{
+		identityContextKey: assurance.IdentityID,
+		aalContextKey:      assurance.AAL,
+	})
 
 	redirect, resp, err := s.hydra.AcceptLoginRequest(ctx, challengeID, payload)
 	if resp != nil {
@@ -266,7 +270,7 @@ func (s *service) rejectRememberedLogin(
 	s.logger.Info(
 		"rejecting remembered login whose subject differs from the live kratos session",
 		"challenge_id", challengeID,
-		"correlation_id", correlationIDFromContext(ctx),
+		"correlation_id", requestid.FromContext(ctx),
 		"hydra_subject", maskIdentityID(hydraSubject),
 		"identity_id", maskIdentityID(sessionIdentityID),
 	)
@@ -298,7 +302,7 @@ func (s *service) emitRememberedLoginRejectAudit(ctx context.Context, req *hydra
 		Outcome:       audit.OutcomeFailure,
 		Sub:           strings.TrimSpace(req.GetSubject()),
 		ClientID:      strings.TrimSpace(client.GetClientId()),
-		CorrelationID: correlationIDFromContext(ctx),
+		CorrelationID: requestid.FromContext(ctx),
 		ErrorCode:     "login_required",
 	}); err != nil {
 		s.logger.Warn("emit login.remembered_reject audit failed", "error", err)
@@ -931,33 +935,6 @@ func readIdentityID(ctx interface{}) string {
 		}
 	}
 	return ""
-}
-
-func ensureLoginContextAssurance(ctx interface{}, assurance SessionAssurance) map[string]any {
-	existing, _ := ctx.(map[string]any)
-	clone := make(map[string]any, len(existing)+2)
-	for key, val := range existing {
-		clone[key] = val
-	}
-	clone[identityContextKey] = assurance.IdentityID
-	clone[aalContextKey] = assurance.AAL
-	return clone
-}
-
-func readLoginContext(req *hydraAdmin.OAuth2LoginRequest) interface{} {
-	if req == nil {
-		return nil
-	}
-
-	if req.AdditionalProperties == nil {
-		return nil
-	}
-
-	if ctx, ok := req.AdditionalProperties["context"]; ok {
-		return ctx
-	}
-
-	return nil
 }
 
 func classifyAlkemioErrorType(err error) string {

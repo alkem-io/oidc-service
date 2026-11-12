@@ -160,7 +160,8 @@ func TestResolveLoginSkipRejectsWhenSessionIdentityDiffers(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			resolution, err := svc.ResolveLogin(withSession(kratosHintSubjectID, "aal1"), loginChallengeID)
+			ctx := WithCorrelationID(withSession(kratosHintSubjectID, "aal1"), "req-remembered-reject")
+			resolution, err := svc.ResolveLogin(ctx, loginChallengeID)
 			require.NoError(t, err)
 			require.Equal(t, rejectRedirect, resolution.RedirectURL)
 			require.NotNil(t, rejected)
@@ -172,6 +173,7 @@ func TestResolveLoginSkipRejectsWhenSessionIdentityDiffers(t *testing.T) {
 			require.Equal(t, audit.OutcomeFailure, event.Outcome)
 			require.Equal(t, hydraSubject, event.Sub)
 			require.Equal(t, "synapse-client", event.ClientID)
+			require.Equal(t, "req-remembered-reject", event.CorrelationID)
 			require.Equal(t, "login_required", event.ErrorCode)
 		})
 	}

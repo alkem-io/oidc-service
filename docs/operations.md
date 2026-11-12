@@ -11,6 +11,10 @@ Kratos browser login endpoint with a `return_to` parameter pointing back to
    `X-Forwarded-Host` (as provided by Traefik) and uses a loopback-safe fallback
    to avoid invalid hosts during local development.
 
+When the Kratos session exists but owes its second factor
+(`session_aal2_required`), the same redirect carries `aal=aal2` so Kratos asks for
+the second step instead of the first.
+
 This ensures end-users never see JSON error payloads like `session_required` in
 their browser during normal flows.
 

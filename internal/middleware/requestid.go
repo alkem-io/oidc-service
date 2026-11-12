@@ -7,13 +7,14 @@ import (
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+
+	"github.com/alkem-io/oidc-service/internal/requestid"
 )
 
 type contextKey string
 
 const (
-	requestIDKey contextKey = "request-id"
-	loggerKey    contextKey = "logger"
+	loggerKey contextKey = "logger"
 
 	// RequestIDHeader is the header used to propagate correlation identifiers.
 	RequestIDHeader = "X-Request-Id"
@@ -37,7 +38,7 @@ func RequestContext(base *zap.Logger) func(http.Handler) http.Handler {
 				reqID = uuid.NewString()
 			}
 
-			ctx := context.WithValue(r.Context(), requestIDKey, reqID)
+			ctx := requestid.With(r.Context(), reqID)
 			child := base.With(
 				zap.String("requestId", reqID),
 				zap.String("method", r.Method),
@@ -50,14 +51,6 @@ func RequestContext(base *zap.Logger) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
-}
-
-// RequestID extracts the correlation ID from context.
-func RequestID(ctx context.Context) string {
-	if v, ok := ctx.Value(requestIDKey).(string); ok {
-		return v
-	}
-	return ""
 }
 
 // Logger extracts the request-scoped logger from context.

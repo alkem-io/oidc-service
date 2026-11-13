@@ -16,8 +16,8 @@ import (
 // claim, `aal1` or `aal2`, on the ID token and on the access token; `amr` is
 // not part of the contract.
 //
-// TEST_ID_TOKEN and TEST_ACCESS_TOKEN are minted by the `alkemio-web` client
-// through the ordinary consent path, against a Hydra whose
+// TEST_ID_TOKEN and TEST_ACCESS_TOKEN are minted by a sign-in through the
+// `alkemio-web` client, against a Hydra whose
 // `oauth2.allowed_top_level_claims` lists `acr` (without that entry Hydra
 // nests the access-token claim under `ext`, and the access-token case fails).
 // Each test skips when its token is not set.

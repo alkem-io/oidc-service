@@ -15,10 +15,10 @@ import (
 	middlewarepkg "github.com/alkem-io/oidc-service/internal/middleware"
 )
 
-// SessionIdentityResolver resolves a Kratos session cookie into an identity identifier.
+// SessionIdentityResolver resolves a Kratos session cookie into its identity and assurance level.
 type SessionIdentityResolver interface {
-	// IdentityID returns the identity ID associated with the session cookie.
-	IdentityID(ctx context.Context, sessionCookie string) (string, error)
+	// Resolve returns the identity and assurance level of the session behind the cookie.
+	Resolve(ctx context.Context, sessionCookie string) (challenge.SessionAssurance, error)
 }
 
 // LoginHandler processes login challenges and delegates to the challenge service.
@@ -147,8 +147,8 @@ func (h *LoginHandler) buildHintProvider(r *http.Request) challenge.IdentityHint
 	cookie, err := r.Cookie(h.sessionCookie)
 	if err != nil {
 		return challenge.IdentityHintFunc(
-			func(context.Context) (string, error) {
-				return "", challenge.ErrIdentitySessionRequired
+			func(context.Context) (challenge.SessionAssurance, error) {
+				return challenge.SessionAssurance{}, challenge.ErrIdentitySessionRequired
 			},
 		)
 	}
@@ -156,15 +156,15 @@ func (h *LoginHandler) buildHintProvider(r *http.Request) challenge.IdentityHint
 	sessionToken := strings.TrimSpace(cookie.Value)
 	if sessionToken == "" {
 		return challenge.IdentityHintFunc(
-			func(context.Context) (string, error) {
-				return "", challenge.ErrIdentitySessionInvalid
+			func(context.Context) (challenge.SessionAssurance, error) {
+				return challenge.SessionAssurance{}, challenge.ErrIdentitySessionInvalid
 			},
 		)
 	}
 
 	return challenge.IdentityHintFunc(
-		func(ctx context.Context) (string, error) {
-			return h.sessionResolver.IdentityID(ctx, sessionToken)
+		func(ctx context.Context) (challenge.SessionAssurance, error) {
+			return h.sessionResolver.Resolve(ctx, sessionToken)
 		},
 	)
 }
@@ -182,13 +182,13 @@ func (h *LoginHandler) handleSessionRedirect(
 	}
 
 	switch chErr.Code() {
-	case "session_required", "session_invalid":
+	case "session_required", "session_invalid", "session_aal2_required":
 		// eligible for redirect
 	default:
 		return false
 	}
 
-	redirectURL, buildErr := h.buildKratosLoginRedirect(r)
+	redirectURL, buildErr := h.buildKratosLoginRedirect(r, chErr.Code())
 	if buildErr != nil {
 		h.logger.Warn(
 			"failed to build kratos login redirect", zap.String("challengeId", challengeID), zap.Error(buildErr),
@@ -211,7 +211,7 @@ func (h *LoginHandler) handleSessionRedirect(
 	return true
 }
 
-func (h *LoginHandler) buildKratosLoginRedirect(r *http.Request) (string, error) {
+func (h *LoginHandler) buildKratosLoginRedirect(r *http.Request, errorCode string) (string, error) {
 	if h.kratosBrowserBase == nil {
 		return "", errors.New("kratos login redirect disabled")
 	}
@@ -226,6 +226,9 @@ func (h *LoginHandler) buildKratosLoginRedirect(r *http.Request) (string, error)
 	target.RawPath = ""
 	query := target.Query()
 	query.Set("return_to", returnTo)
+	if errorCode == "session_aal2_required" {
+		query.Set("aal", "aal2")
+	}
 	target.RawQuery = query.Encode()
 	target.Fragment = ""
 

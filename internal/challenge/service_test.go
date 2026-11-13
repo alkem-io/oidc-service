@@ -1,8 +1,11 @@
 package challenge
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -11,6 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/alkem-io/oidc-service/internal/alkemio"
+	"github.com/alkem-io/oidc-service/internal/audit"
+	"github.com/alkem-io/oidc-service/internal/requestid"
 )
 
 const (
@@ -53,113 +58,180 @@ func TestNewServiceRequiresAlkemioResolver(t *testing.T) {
 	require.EqualError(t, err, "alkemio resolver is required")
 }
 
-func TestResolveLoginSkipUsesHydraSubject(t *testing.T) {
-	login := hydraAdmin.NewOAuth2LoginRequestWithDefaults()
-	login.SetChallenge(loginChallengeID)
-	login.SetSkip(true)
-	login.SetSubject("123e4567-e89b-12d3-a456-426614174000")
-
-	mock := &hydraClientMock{
-		getLogin: func(_ context.Context, challengeID string) (*hydraAdmin.OAuth2LoginRequest, *http.Response, error) {
-			require.Equal(t, loginChallengeID, challengeID)
-			return login, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+func withSession(identityID, aal string) context.Context {
+	return WithIdentityHintProvider(context.Background(), IdentityHintFunc(
+		func(context.Context) (SessionAssurance, error) {
+			return SessionAssurance{IdentityID: identityID, AAL: aal}, nil
 		},
-		acceptLogin: func(
-			_ context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2LoginRequest,
-		) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
-			require.Equal(t, loginChallengeID, challengeID)
-			require.NotNil(t, body)
-			require.Equal(t, "123e4567-e89b-12d3-a456-426614174000", body.Subject)
-			require.True(t, body.GetRemember())
-			require.Equal(t, int64(time.Hour.Seconds()), body.GetRememberFor())
-			return hydraAdmin.NewOAuth2RedirectTo(redirectURL), &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
-		},
-	}
-
-	idFetcher := identityFetcherStub{fetch: func(context.Context, string) (*IdentityProfile, error) {
-		t.Fatalf("identity fetch should not be called for skip flow")
-		return nil, nil
-	}}
-
-	svc, err := NewService(
-		Options{
-			Hydra:       mock,
-			Identity:    idFetcher,
-			Alkemio:     alkemioResolverStub{},
-			RememberFor: time.Hour,
-		},
-	)
-	require.NoError(t, err)
-
-	resolution, err := svc.ResolveLogin(context.Background(), loginChallengeID)
-	require.NoError(t, err)
-	require.NotNil(t, resolution)
-	require.Equal(t, redirectURL, resolution.RedirectURL)
+	))
 }
 
-func TestResolveLoginSkipHydraSubjectInvalidUsesHint(t *testing.T) {
-	login := hydraAdmin.NewOAuth2LoginRequestWithDefaults()
-	login.SetChallenge(loginChallengeID)
-	login.SetSkip(true)
-	login.SetSubject("admin@alkem.io")
+func TestResolveLoginSkipAcceptsLiveSessionAssurance(t *testing.T) {
+	for _, aal := range []string{"aal1", "aal2"} {
+		t.Run(aal, func(t *testing.T) {
+			login := hydraAdmin.NewOAuth2LoginRequestWithDefaults()
+			login.SetChallenge(loginChallengeID)
+			login.SetSkip(true)
+			login.SetSubject(kratosHintSubjectID)
 
-	var capturedContext interface{}
+			var accepted *hydraAdmin.AcceptOAuth2LoginRequest
+			mock := &hydraClientMock{
+				getLogin: func(_ context.Context, challengeID string) (*hydraAdmin.OAuth2LoginRequest, *http.Response, error) {
+					require.Equal(t, loginChallengeID, challengeID)
+					return login, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+				},
+				acceptLogin: func(
+					_ context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2LoginRequest,
+				) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
+					require.Equal(t, loginChallengeID, challengeID)
+					accepted = body
+					return hydraAdmin.NewOAuth2RedirectTo(redirectURL), &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+				},
+			}
 
-	mock := &hydraClientMock{
-		getLogin: func(_ context.Context, _ string) (*hydraAdmin.OAuth2LoginRequest, *http.Response, error) {
-			return login, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
-		},
-		acceptLogin: func(
-			_ context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2LoginRequest,
-		) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
-			require.Equal(t, loginChallengeID, challengeID)
-			require.Equal(t, kratosHintSubjectID, body.Subject)
-			require.True(t, body.GetRemember())
-			require.Equal(t, int64(time.Hour.Seconds()), body.GetRememberFor())
-			capturedContext = body.GetContext()
-			return hydraAdmin.NewOAuth2RedirectTo(redirectURL), &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
-		},
+			idFetcher := identityFetcherStub{fetch: func(context.Context, string) (*IdentityProfile, error) {
+				t.Fatalf("identity fetch should not be called for skip flow")
+				return nil, nil
+			}}
+
+			svc, err := NewService(
+				Options{Hydra: mock, Identity: idFetcher, Alkemio: alkemioResolverStub{}, RememberFor: time.Hour},
+			)
+			require.NoError(t, err)
+
+			resolution, err := svc.ResolveLogin(withSession(kratosHintSubjectID, aal), loginChallengeID)
+			require.NoError(t, err)
+			require.Equal(t, redirectURL, resolution.RedirectURL)
+
+			require.NotNil(t, accepted)
+			require.Equal(t, kratosHintSubjectID, accepted.Subject)
+			require.Equal(t, aal, accepted.GetAcr())
+			require.Nil(t, accepted.Amr)
+			require.True(t, accepted.GetRemember())
+			require.Equal(t, int64(time.Hour.Seconds()), accepted.GetRememberFor())
+
+			ctxMap, ok := accepted.GetContext().(map[string]any)
+			require.True(t, ok)
+			require.Equal(t, kratosHintSubjectID, ctxMap[identityContextKey])
+			require.Equal(t, aal, ctxMap[aalContextKey])
+		})
 	}
-
-	idFetcher := identityFetcherStub{fetch: func(context.Context, string) (*IdentityProfile, error) {
-		t.Fatalf("identity fetch should not be called for skip flow")
-		return nil, nil
-	}}
-
-	svc, err := NewService(
-		Options{
-			Hydra:       mock,
-			Identity:    idFetcher,
-			Alkemio:     alkemioResolverStub{},
-			RememberFor: time.Hour,
-		},
-	)
-	require.NoError(t, err)
-
-	provider := IdentityHintFunc(
-		func(_ context.Context) (string, error) {
-			return kratosHintSubjectID, nil
-		},
-	)
-
-	ctx := WithIdentityHintProvider(context.Background(), provider)
-	resolution, err := svc.ResolveLogin(ctx, loginChallengeID)
-	require.NoError(t, err)
-	require.NotNil(t, resolution)
-	require.Equal(t, redirectURL, resolution.RedirectURL)
-
-	ctxMap, ok := capturedContext.(map[string]any)
-	require.True(t, ok)
-	require.Equal(t, kratosHintSubjectID, ctxMap[identityContextKey])
 }
 
-func TestResolveLoginFetchesIdentityAndSetsContext(t *testing.T) {
+func TestResolveLoginSkipRejectsWhenSessionIdentityDiffers(t *testing.T) {
+	const rejectRedirect = "https://client.example/cb?error=login_required"
+
+	for name, hydraSubject := range map[string]string{
+		"other identity": "123e4567-e89b-12d3-a456-426614174999",
+		"empty subject":  "",
+	} {
+		t.Run(name, func(t *testing.T) {
+			login := hydraAdmin.NewOAuth2LoginRequestWithDefaults()
+			login.SetChallenge(loginChallengeID)
+			login.SetSkip(true)
+			login.SetSubject(hydraSubject)
+			client := hydraAdmin.NewOAuth2Client()
+			client.SetClientId("synapse-client")
+			login.SetClient(*client)
+
+			var rejected *hydraAdmin.RejectOAuth2Request
+			mock := &hydraClientMock{
+				getLogin: func(_ context.Context, _ string) (*hydraAdmin.OAuth2LoginRequest, *http.Response, error) {
+					return login, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+				},
+				acceptLogin: func(
+					context.Context, string, *hydraAdmin.AcceptOAuth2LoginRequest,
+				) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
+					t.Fatal("a remembered login of another identity must not be accepted")
+					return nil, nil, nil
+				},
+				rejectLogin: func(
+					_ context.Context, challengeID string, body *hydraAdmin.RejectOAuth2Request,
+				) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
+					require.Equal(t, loginChallengeID, challengeID)
+					rejected = body
+					return hydraAdmin.NewOAuth2RedirectTo(rejectRedirect), &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+				},
+			}
+
+			var auditLog bytes.Buffer
+			svc, err := NewService(Options{
+				Hydra: mock, Identity: identityFetcherStub{}, Alkemio: alkemioResolverStub{},
+				Audit: audit.NewEmitter(&auditLog),
+			})
+			require.NoError(t, err)
+
+			ctx := requestid.With(withSession(kratosHintSubjectID, "aal1"), "req-remembered-reject")
+			resolution, err := svc.ResolveLogin(ctx, loginChallengeID)
+			require.NoError(t, err)
+			require.Equal(t, rejectRedirect, resolution.RedirectURL)
+			require.NotNil(t, rejected)
+			require.Equal(t, "login_required", rejected.GetError())
+
+			var event audit.Event
+			require.NoError(t, json.Unmarshal(auditLog.Bytes(), &event))
+			require.Equal(t, "login.remembered_reject", event.EventType)
+			require.Equal(t, audit.OutcomeFailure, event.Outcome)
+			require.Equal(t, hydraSubject, event.Sub)
+			require.Equal(t, kratosHintSubjectID, event.ActorID)
+			require.Equal(t, "synapse-client", event.ClientID)
+			require.Equal(t, "req-remembered-reject", event.CorrelationID)
+			require.Equal(t, "login_required", event.ErrorCode)
+		})
+	}
+}
+
+func TestResolveLoginWithoutUsableSessionIsNeverAccepted(t *testing.T) {
+	sessionErrors := map[error]string{
+		ErrIdentitySessionRequired:     "session_required",
+		ErrIdentitySessionInvalid:      "session_invalid",
+		ErrIdentitySessionAAL2Required: "session_aal2_required",
+	}
+	for flow, skip := range map[string]bool{"skip": true, "standard": false} {
+		for sessionErr, code := range sessionErrors {
+			t.Run(flow+"/"+code, func(t *testing.T) {
+				login := hydraAdmin.NewOAuth2LoginRequestWithDefaults()
+				login.SetChallenge(loginChallengeID)
+				login.SetSkip(skip)
+				login.SetSubject(kratosHintSubjectID)
+
+				mock := &hydraClientMock{
+					getLogin: func(_ context.Context, _ string) (*hydraAdmin.OAuth2LoginRequest, *http.Response, error) {
+						return login, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+					},
+					acceptLogin: func(
+						context.Context, string, *hydraAdmin.AcceptOAuth2LoginRequest,
+					) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
+						t.Fatal("a login without a usable kratos session must not be accepted")
+						return nil, nil, nil
+					},
+				}
+
+				svc, err := NewService(Options{Hydra: mock, Identity: identityFetcherStub{}, Alkemio: alkemioResolverStub{}})
+				require.NoError(t, err)
+
+				ctx := WithIdentityHintProvider(context.Background(), IdentityHintFunc(
+					func(context.Context) (SessionAssurance, error) {
+						return SessionAssurance{}, sessionErr
+					},
+				))
+				_, err = svc.ResolveLogin(ctx, loginChallengeID)
+
+				var challengeErr Error
+				require.ErrorAs(t, err, &challengeErr)
+				require.Equal(t, http.StatusUnauthorized, challengeErr.StatusCode())
+				require.Equal(t, code, challengeErr.Code())
+			})
+		}
+	}
+}
+
+func TestResolveLoginStandardUsesLiveSessionOverHydraSubject(t *testing.T) {
 	login := hydraAdmin.NewOAuth2LoginRequestWithDefaults()
 	login.SetChallenge(loginChallengeID)
-	login.SetSubject(kratosIdentityID)
+	login.SetSubject(kratosHintSubjectID)
 
-	var capturedContext interface{}
-	var capturedSubject string
+	var accepted *hydraAdmin.AcceptOAuth2LoginRequest
 
 	mock := &hydraClientMock{
 		getLogin: func(_ context.Context, _ string) (*hydraAdmin.OAuth2LoginRequest, *http.Response, error) {
@@ -168,8 +240,7 @@ func TestResolveLoginFetchesIdentityAndSetsContext(t *testing.T) {
 		acceptLogin: func(
 			_ context.Context, _ string, body *hydraAdmin.AcceptOAuth2LoginRequest,
 		) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
-			capturedContext = body.GetContext()
-			capturedSubject = body.Subject
+			accepted = body
 			return hydraAdmin.NewOAuth2RedirectTo(redirectURL), &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 		},
 	}
@@ -195,15 +266,21 @@ func TestResolveLoginFetchesIdentityAndSetsContext(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	resolution, err := svc.ResolveLogin(context.Background(), loginChallengeID)
+	resolution, err := svc.ResolveLogin(withSession(kratosIdentityID, "aal2"), loginChallengeID)
 	require.NoError(t, err)
 	require.Equal(t, redirectURL, resolution.RedirectURL)
 
-	require.Equal(t, kratosIdentityID, capturedSubject)
+	require.NotNil(t, accepted)
+	require.Equal(t, kratosIdentityID, accepted.Subject)
+	require.Equal(t, "aal2", accepted.GetAcr())
+	require.Nil(t, accepted.Amr)
+	require.True(t, accepted.GetRemember())
+	require.Equal(t, int64(time.Hour.Seconds()), accepted.GetRememberFor())
 
-	ctxMap, ok := capturedContext.(map[string]any)
+	ctxMap, ok := accepted.GetContext().(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, kratosIdentityID, ctxMap[identityContextKey])
+	require.Equal(t, "aal2", ctxMap[aalContextKey])
 	require.Equal(t, identityEmail, ctxMap["email"])
 	require.Equal(t, identityDisplayName, ctxMap["display_name"])
 	require.Equal(t, identityMatrixID, ctxMap["matrix_user_id"])
@@ -214,7 +291,7 @@ func TestResolveLoginUsesIdentityHintProvider(t *testing.T) {
 	login := hydraAdmin.NewOAuth2LoginRequestWithDefaults()
 	login.SetChallenge(loginChallengeID)
 
-	var capturedSubject string
+	var accepted *hydraAdmin.AcceptOAuth2LoginRequest
 	var providerCalls int
 
 	mock := &hydraClientMock{
@@ -224,7 +301,7 @@ func TestResolveLoginUsesIdentityHintProvider(t *testing.T) {
 		acceptLogin: func(
 			_ context.Context, _ string, body *hydraAdmin.AcceptOAuth2LoginRequest,
 		) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
-			capturedSubject = body.Subject
+			accepted = body
 			return hydraAdmin.NewOAuth2RedirectTo(redirectURL), &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 		},
 	}
@@ -242,9 +319,9 @@ func TestResolveLoginUsesIdentityHintProvider(t *testing.T) {
 	require.NoError(t, err)
 
 	provider := IdentityHintFunc(
-		func(_ context.Context) (string, error) {
+		func(_ context.Context) (SessionAssurance, error) {
 			providerCalls++
-			return identityHintValue, nil
+			return SessionAssurance{IdentityID: identityHintValue, AAL: "aal1"}, nil
 		},
 	)
 
@@ -253,7 +330,8 @@ func TestResolveLoginUsesIdentityHintProvider(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resolution)
 	require.Equal(t, redirectURL, resolution.RedirectURL)
-	require.Equal(t, identityHintValue, capturedSubject)
+	require.Equal(t, identityHintValue, accepted.Subject)
+	require.Equal(t, "aal1", accepted.GetAcr())
 	require.Equal(t, 1, providerCalls)
 }
 
@@ -303,8 +381,8 @@ func TestResolveLoginInvalidHintReturnsSessionInvalid(t *testing.T) {
 	require.NoError(t, err)
 
 	provider := IdentityHintFunc(
-		func(_ context.Context) (string, error) {
-			return "", ErrIdentitySessionInvalid
+		func(_ context.Context) (SessionAssurance, error) {
+			return SessionAssurance{}, ErrIdentitySessionInvalid
 		},
 	)
 
@@ -336,7 +414,7 @@ func TestResolveLoginMissingTraitsReturnsDomainError(t *testing.T) {
 	svc, err := NewService(Options{Hydra: mock, Identity: idFetcher, Alkemio: alkemioResolverStub{}})
 	require.NoError(t, err)
 
-	_, err = svc.ResolveLogin(context.Background(), loginChallengeID)
+	_, err = svc.ResolveLogin(withSession(kratosIdentityID, "aal1"), loginChallengeID)
 	require.Error(t, err)
 
 	var challengeErr Error
@@ -430,6 +508,66 @@ func TestResolveConsentBuildsSessionClaims(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, kratosIdentityID, ctxMap[identityContextKey])
 	require.Equal(t, identityMatrixID, ctxMap["matrix_user_id"])
+}
+
+func TestResolveConsentCarriesSessionAssuranceOnAccessToken(t *testing.T) {
+	const preConsentClient = "alkemio-web"
+
+	for _, preConsent := range []bool{false, true} {
+		for _, aal := range []string{"aal2", ""} {
+			name := fmt.Sprintf("preConsent=%t/aal=%q", preConsent, aal)
+			t.Run(name, func(t *testing.T) {
+				consentCtx := map[string]any{identityContextKey: kratosIdentityID}
+				if aal != "" {
+					consentCtx[aalContextKey] = aal
+				}
+				consent := hydraAdmin.NewOAuth2ConsentRequest(consentChallengeID)
+				consent.SetRequestedScope([]string{"openid", "alkemio"})
+				consent.SetContext(consentCtx)
+				client := hydraAdmin.NewOAuth2Client()
+				client.SetClientId("other-client")
+				if preConsent {
+					client.SetClientId(preConsentClient)
+				}
+				consent.SetClient(*client)
+
+				var session hydraAdmin.AcceptOAuth2ConsentRequestSession
+				mock := &hydraClientMock{
+					getConsent: func(context.Context, string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error) {
+						return consent, &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+					},
+					acceptConsent: func(
+						_ context.Context, _ string, body *hydraAdmin.AcceptOAuth2ConsentRequest,
+					) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
+						session = body.GetSession()
+						return hydraAdmin.NewOAuth2RedirectTo(redirectURL), &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+					},
+				}
+				idFetcher := identityFetcherStub{fetch: func(context.Context, string) (*IdentityProfile, error) {
+					return &IdentityProfile{ID: kratosIdentityID, Email: identityEmail}, nil
+				}}
+
+				svc, err := NewService(Options{
+					Hydra: mock, Identity: idFetcher, Alkemio: alkemioResolverStub{},
+					PreConsentClientIDs: []string{preConsentClient},
+				})
+				require.NoError(t, err)
+
+				_, err = svc.ResolveConsent(context.Background(), consentChallengeID)
+				require.NoError(t, err)
+
+				accessClaims, ok := session.GetAccessToken().(map[string]any)
+				require.True(t, ok)
+				acr, present := accessClaims["acr"]
+				if aal == "" {
+					require.False(t, present)
+				} else {
+					require.Equal(t, aal, acr)
+				}
+				require.NotContains(t, accessClaims, "amr")
+			})
+		}
+	}
 }
 
 func TestResolveConsentInvalidAlkemioMappingReturnsError(t *testing.T) {
@@ -600,6 +738,9 @@ type hydraClientMock struct {
 	acceptLogin func(
 		ctx context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2LoginRequest,
 	) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error)
+	rejectLogin func(
+		ctx context.Context, challengeID string, body *hydraAdmin.RejectOAuth2Request,
+	) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error)
 	getConsent func(ctx context.Context, challengeID string) (
 		*hydraAdmin.OAuth2ConsentRequest, *http.Response, error,
 	)
@@ -630,6 +771,15 @@ func (m *hydraClientMock) AcceptLoginRequest(
 		return nil, nil, errors.New("acceptLogin not stubbed")
 	}
 	return m.acceptLogin(ctx, challengeID, body)
+}
+
+func (m *hydraClientMock) RejectLoginRequest(
+	ctx context.Context, challengeID string, body *hydraAdmin.RejectOAuth2Request,
+) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error) {
+	if m.rejectLogin == nil {
+		return nil, nil, errors.New("rejectLogin not stubbed")
+	}
+	return m.rejectLogin(ctx, challengeID, body)
 }
 
 func (m *hydraClientMock) GetConsentRequest(ctx context.Context, challengeID string) (

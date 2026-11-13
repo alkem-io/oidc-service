@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/alkem-io/oidc-service/internal/requestid"
 )
 
 func TestRequestContextGeneratesHeader(t *testing.T) {
@@ -17,7 +19,7 @@ func TestRequestContextGeneratesHeader(t *testing.T) {
 	var loggerPresent bool
 
 	h := RequestContext(zap.NewNop())(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		capturedID = RequestID(r.Context())
+		capturedID = requestid.FromContext(r.Context())
 		logger := Logger(r.Context())
 		loggerPresent = logger != nil
 		w.WriteHeader(http.StatusOK)
@@ -37,7 +39,7 @@ func TestRequestContextRespectsIncomingID(t *testing.T) {
 	rec := httptest.NewRecorder()
 
 	h := RequestContext(zap.NewNop())(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "incoming", RequestID(r.Context()))
+		require.Equal(t, "incoming", requestid.FromContext(r.Context()))
 		w.WriteHeader(http.StatusNoContent)
 	}))
 

@@ -71,7 +71,14 @@ selfservice:
 Resolution failures block login (sessions must have claims): HTTP 404 if identity not found, HTTP 500 for other errors.
 
 On `session_required`/`session_invalid`, the service redirects browsers to the
-Kratos login flow and returns to `/oidc/login` after authentication.
+Kratos login flow and returns to `/oidc/login` after authentication. On
+`session_aal2_required` (the Kratos session owes its second factor) it does the
+same with `aal=aal2` added, so Kratos asks for the second step; in every case the
+`return_to` keeps the original `login_challenge`. Rolling the service back to a
+release without this redirect while Kratos answers `session_aal2_required` loops
+enrolled members between this service and Kratos: the older build sends them to a
+plain Kratos login, which their first-factor session satisfies at once. Never roll
+back while Kratos requires the second factor.
 
 ## OpenAPI reference
 

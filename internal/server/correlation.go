@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	middlewarepkg "github.com/alkem-io/oidc-service/internal/middleware"
+	"github.com/alkem-io/oidc-service/internal/requestid"
 )
 
 // CorrelationIDHeader mirrors middleware.RequestIDHeader so the server package
@@ -15,7 +16,7 @@ const CorrelationIDHeader = middlewarepkg.RequestIDHeader
 // RequestContext middleware. Returns an empty string when the context carries
 // no correlation id (e.g. outside of an inbound HTTP request).
 func CorrelationID(ctx context.Context) string {
-	return middlewarepkg.RequestID(ctx)
+	return requestid.FromContext(ctx)
 }
 
 // PropagateCorrelationID copies the inbound correlation id onto an outbound

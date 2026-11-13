@@ -25,7 +25,7 @@ type SessionConfig struct {
 	CookieName string
 }
 
-// SessionResolver resolves Kratos session cookies into identity identifiers.
+// SessionResolver resolves Kratos session cookies into their identity and assurance level.
 type SessionResolver struct {
 	baseURL    string
 	client     *http.Client
@@ -66,21 +66,21 @@ func NewSessionResolver(cfg SessionConfig) (*SessionResolver, error) {
 	}, nil
 }
 
-// IdentityID retrieves the Kratos identity ID associated with the provided session cookie.
-func (r *SessionResolver) IdentityID(ctx context.Context, sessionCookie string) (string, error) {
+// Resolve reads the Kratos session behind the provided cookie: its identity and authenticator assurance level.
+func (r *SessionResolver) Resolve(ctx context.Context, sessionCookie string) (challenge.SessionAssurance, error) {
 	if r == nil {
-		return "", challenge.ErrIdentitySessionInvalid
+		return challenge.SessionAssurance{}, challenge.ErrIdentitySessionInvalid
 	}
 
 	cookieValue := strings.TrimSpace(sessionCookie)
 	if cookieValue == "" {
-		return "", challenge.ErrIdentitySessionInvalid
+		return challenge.SessionAssurance{}, challenge.ErrIdentitySessionInvalid
 	}
 
 	endpoint := r.baseURL + "/sessions/whoami"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return "", fmt.Errorf("create kratos whoami request: %w", err)
+		return challenge.SessionAssurance{}, fmt.Errorf("create kratos whoami request: %w", err)
 	}
 
 	req.AddCookie(&http.Cookie{Name: r.cookieName, Value: cookieValue})
@@ -88,7 +88,7 @@ func (r *SessionResolver) IdentityID(ctx context.Context, sessionCookie string) 
 	// #nosec G704 -- The destination is the operator-configured Kratos URL; the session cookie is only a request header.
 	resp, err := r.client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("kratos whoami request failed: %w", err)
+		return challenge.SessionAssurance{}, fmt.Errorf("kratos whoami request failed: %w", err)
 	}
 	defer func() {
 		_ = resp.Body.Close()
@@ -100,22 +100,40 @@ func (r *SessionResolver) IdentityID(ctx context.Context, sessionCookie string) 
 			Identity struct {
 				ID string `json:"id"`
 			} `json:"identity"`
+			AuthenticatorAssuranceLevel string `json:"authenticator_assurance_level"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-			return "", fmt.Errorf("decode kratos whoami response: %w", err)
+			return challenge.SessionAssurance{}, fmt.Errorf("decode kratos whoami response: %w", err)
 		}
 
 		identityID := strings.TrimSpace(payload.Identity.ID)
 		if identityID == "" {
-			return "", challenge.ErrIdentitySessionInvalid
+			return challenge.SessionAssurance{}, challenge.ErrIdentitySessionInvalid
 		}
-		return identityID, nil
+		return challenge.SessionAssurance{
+			IdentityID: identityID,
+			AAL:        strings.TrimSpace(payload.AuthenticatorAssuranceLevel),
+		}, nil
 
-	case http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound:
-		return "", challenge.ErrIdentitySessionInvalid
+	case http.StatusForbidden:
+		var payload struct {
+			Error struct {
+				ID string `json:"id"`
+			} `json:"error"`
+		}
+		if json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&payload) == nil &&
+			payload.Error.ID == "session_aal2_required" {
+			return challenge.SessionAssurance{}, challenge.ErrIdentitySessionAAL2Required
+		}
+		return challenge.SessionAssurance{}, challenge.ErrIdentitySessionInvalid
+
+	case http.StatusUnauthorized, http.StatusNotFound:
+		return challenge.SessionAssurance{}, challenge.ErrIdentitySessionInvalid
 
 	default:
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return "", fmt.Errorf("kratos whoami request failed (status %d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return challenge.SessionAssurance{}, fmt.Errorf(
+			"kratos whoami request failed (status %d): %s", resp.StatusCode, strings.TrimSpace(string(body)),
+		)
 	}
 }

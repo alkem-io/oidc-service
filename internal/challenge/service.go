@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	hydraAdmin "github.com/ory/hydra-client-go/v2"
 
 	"github.com/alkem-io/oidc-service/internal/alkemio"
 	"github.com/alkem-io/oidc-service/internal/audit"
+	"github.com/alkem-io/oidc-service/internal/requestid"
 )
 
 const (
@@ -29,6 +29,10 @@ type HydraClient interface {
 	// AcceptLoginRequest accepts the login request in Hydra.
 	AcceptLoginRequest(
 		ctx context.Context, challengeID string, body *hydraAdmin.AcceptOAuth2LoginRequest,
+	) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error)
+	// RejectLoginRequest rejects the login request in Hydra.
+	RejectLoginRequest(
+		ctx context.Context, challengeID string, body *hydraAdmin.RejectOAuth2Request,
 	) (*hydraAdmin.OAuth2RedirectTo, *http.Response, error)
 	// GetConsentRequest retrieves the consent request from Hydra.
 	GetConsentRequest(ctx context.Context, challengeID string) (*hydraAdmin.OAuth2ConsentRequest, *http.Response, error)
@@ -72,7 +76,8 @@ type Options struct {
 	PreConsentClientIDs []string
 
 	// Audit, when non-nil, receives a `consent.auto_accept` event whenever the
-	// pre-consent filter short-circuits the consent flow (FR-030 / FR-035).
+	// pre-consent filter short-circuits the consent flow, and a
+	// `login.remembered_reject` event whenever a remembered login is refused.
 	// Optional — production wires the stdout emitter; tests may leave it nil.
 	Audit *audit.Emitter
 }
@@ -221,26 +226,31 @@ func (s *service) ResolveLogin(ctx context.Context, challengeID string) (*Resolu
 		return s.resolveLoginSkip(ctx, challengeID, req)
 	}
 
-	return s.resolveLoginStandard(ctx, challengeID, req)
+	return s.resolveLoginStandard(ctx, challengeID)
 }
 
 func (s *service) resolveLoginSkip(
 	ctx context.Context, challengeID string, req *hydraAdmin.OAuth2LoginRequest,
 ) (*Resolution, error) {
-	contextData := readLoginContext(req)
-	subject, err := s.determineSkipSubject(ctx, challengeID, req, contextData)
+	assurance, err := liveSessionAssurance(ctx, challengeID)
 	if err != nil {
 		return nil, err
 	}
 
-	contextData = ensureLoginContextIdentity(contextData, subject)
+	// Hydra refuses a subject change on a remembered login, and sending the browser back to
+	// Kratos would meet the same live session and loop, so a mismatch ends the login instead.
+	if strings.TrimSpace(req.GetSubject()) != assurance.IdentityID {
+		return s.rejectRememberedLogin(ctx, challengeID, req, assurance.IdentityID)
+	}
 
-	payload := hydraAdmin.NewAcceptOAuth2LoginRequest(subject)
+	payload := hydraAdmin.NewAcceptOAuth2LoginRequest(assurance.IdentityID)
 	payload.SetRemember(true)
 	payload.SetRememberFor(s.rememberFor)
-	if contextMap, ok := contextData.(map[string]any); ok {
-		payload.SetContext(contextMap)
-	}
+	payload.SetAcr(assurance.AAL)
+	payload.SetContext(map[string]any{
+		identityContextKey: assurance.IdentityID,
+		aalContextKey:      assurance.AAL,
+	})
 
 	redirect, resp, err := s.hydra.AcceptLoginRequest(ctx, challengeID, payload)
 	if resp != nil {
@@ -253,66 +263,76 @@ func (s *service) resolveLoginSkip(
 	return resolutionFromRedirect(challengeID, redirect)
 }
 
-func (s *service) determineSkipSubject(
-	ctx context.Context, challengeID string, req *hydraAdmin.OAuth2LoginRequest, contextData interface{},
-) (string, error) {
-	subject := strings.TrimSpace(req.GetSubject())
+func (s *service) rejectRememberedLogin(
+	ctx context.Context, challengeID string, req *hydraAdmin.OAuth2LoginRequest, sessionIdentityID string,
+) (*Resolution, error) {
+	hydraSubject := strings.TrimSpace(req.GetSubject())
+	s.logger.Info(
+		"rejecting remembered login whose subject differs from the live kratos session",
+		"challenge_id", challengeID,
+		"correlation_id", requestid.FromContext(ctx),
+		"hydra_subject", maskIdentityID(hydraSubject),
+		"identity_id", maskIdentityID(sessionIdentityID),
+	)
 
-	if ctxID := readIdentityID(contextData); ctxID != "" {
-		subject = ctxID
+	body := hydraAdmin.NewRejectOAuth2Request()
+	body.SetError("login_required")
+	body.SetErrorDescription("the remembered sign-in belongs to another identity; sign out and sign in again")
+
+	redirect, resp, err := s.hydra.RejectLoginRequest(ctx, challengeID, body)
+	if resp != nil {
+		defer func() { _ = resp.Body.Close() }()
+	}
+	if err != nil {
+		return nil, mapHydraError(FlowLogin, challengeID, resp, err)
 	}
 
-	if subject == "" {
-		return "", NewHydraFailureError(challengeID, "hydra login request missing subject for skip flow")
-	}
+	s.emitRememberedLoginRejectAudit(ctx, req, sessionIdentityID)
 
-	if isKratosIdentityID(subject) {
-		return subject, nil
-	}
-
-	if provider := IdentityHintProviderFromContext(ctx); provider != nil {
-		identityID, err := provider.IdentityHint(ctx)
-		if err != nil {
-			return "", mapIdentityHintError(challengeID, err)
-		}
-
-		identityID = strings.TrimSpace(identityID)
-		if identityID == "" {
-			return "", NewSessionInvalidError(challengeID)
-		}
-
-		if !isKratosIdentityID(identityID) {
-			return "", NewSessionInvalidError(challengeID)
-		}
-
-		return identityID, nil
-	}
-
-	return "", NewSessionInvalidError(challengeID)
+	return resolutionFromRedirect(challengeID, redirect)
 }
 
-func (s *service) resolveLoginStandard(
-	ctx context.Context, challengeID string, req *hydraAdmin.OAuth2LoginRequest,
-) (*Resolution, error) {
-	identityID := strings.TrimSpace(req.GetSubject())
-	if identityID == "" {
-		provider := IdentityHintProviderFromContext(ctx)
-		if provider == nil {
-			return nil, NewSessionRequiredError(challengeID)
-		}
+func (s *service) emitRememberedLoginRejectAudit(
+	ctx context.Context, req *hydraAdmin.OAuth2LoginRequest, sessionIdentityID string,
+) {
+	if s.audit == nil {
+		return
+	}
+	client := req.GetClient()
+	if err := s.audit.Emit(audit.Event{
+		EventType:     "login.remembered_reject",
+		Outcome:       audit.OutcomeFailure,
+		Sub:           strings.TrimSpace(req.GetSubject()),
+		ActorID:       sessionIdentityID,
+		ClientID:      strings.TrimSpace(client.GetClientId()),
+		CorrelationID: requestid.FromContext(ctx),
+		ErrorCode:     "login_required",
+	}); err != nil {
+		s.logger.Warn("emit login.remembered_reject audit failed", "error", err)
+	}
+}
 
-		hintID, err := provider.IdentityHint(ctx)
-		if err != nil {
-			return nil, mapIdentityHintError(challengeID, err)
-		}
-
-		identityID = strings.TrimSpace(hintID)
-		if identityID == "" {
-			return nil, NewSessionInvalidError(challengeID)
-		}
+// liveSessionAssurance reads the Kratos session of the browser completing the login.
+func liveSessionAssurance(ctx context.Context, challengeID string) (SessionAssurance, error) {
+	provider := IdentityHintProviderFromContext(ctx)
+	if provider == nil {
+		return SessionAssurance{}, NewSessionRequiredError(challengeID)
 	}
 
-	profile, err := s.identity.Fetch(ctx, identityID)
+	assurance, err := provider.IdentityHint(ctx)
+	if err != nil {
+		return SessionAssurance{}, mapIdentityHintError(challengeID, err)
+	}
+	return assurance, nil
+}
+
+func (s *service) resolveLoginStandard(ctx context.Context, challengeID string) (*Resolution, error) {
+	assurance, err := liveSessionAssurance(ctx, challengeID)
+	if err != nil {
+		return nil, err
+	}
+
+	profile, err := s.identity.Fetch(ctx, assurance.IdentityID)
 	if err != nil {
 		return nil, mapIdentityError(challengeID, err)
 	}
@@ -320,7 +340,8 @@ func (s *service) resolveLoginStandard(
 	payload := hydraAdmin.NewAcceptOAuth2LoginRequest(profile.ID)
 	payload.SetRemember(true)
 	payload.SetRememberFor(s.rememberFor)
-	payload.SetContext(buildLoginContext(profile))
+	payload.SetAcr(assurance.AAL)
+	payload.SetContext(buildLoginContext(profile, assurance.AAL))
 
 	redirect, resp, err := s.hydra.AcceptLoginRequest(ctx, challengeID, payload)
 	if resp != nil {
@@ -388,7 +409,7 @@ func (s *service) ResolveConsent(ctx context.Context, challengeID string) (*Reso
 
 	session := hydraAdmin.NewAcceptOAuth2ConsentRequestSession()
 	session.SetIdToken(s.buildIDTokenClaims(profile))
-	session.SetAccessToken(s.buildAccessTokenClaims(profile))
+	session.SetAccessToken(s.buildAccessTokenClaims(profile, req.GetContext()))
 	payload.SetSession(*session)
 
 	redirect, resp, err := s.hydra.AcceptConsentRequest(ctx, challengeID, payload)
@@ -476,7 +497,7 @@ func (s *service) resolveConsentAutoAccept(
 		}
 		session := hydraAdmin.NewAcceptOAuth2ConsentRequestSession()
 		session.SetIdToken(s.buildIDTokenClaims(profile))
-		session.SetAccessToken(s.buildAccessTokenClaims(profile))
+		session.SetAccessToken(s.buildAccessTokenClaims(profile, req.GetContext()))
 		payload.SetSession(*session)
 		payload.SetContext(buildConsentContext(profile))
 	}
@@ -662,6 +683,9 @@ func mapIdentityHintError(challengeID string, err error) error {
 	if errors.Is(err, ErrIdentitySessionInvalid) {
 		return NewSessionInvalidError(challengeID)
 	}
+	if errors.Is(err, ErrIdentitySessionAAL2Required) {
+		return NewSessionAAL2RequiredError(challengeID)
+	}
 	return NewKratosFailureError(challengeID, err.Error())
 }
 
@@ -741,11 +765,15 @@ func (s *service) attachAlkemioClaim(ctx context.Context, challengeID string, pr
 	return nil
 }
 
-const identityContextKey = "identity_id"
+const (
+	identityContextKey = "identity_id"
+	aalContextKey      = "aal"
+)
 
-func buildLoginContext(profile *IdentityProfile) map[string]any {
+func buildLoginContext(profile *IdentityProfile, aal string) map[string]any {
 	loginCtx := map[string]any{
 		identityContextKey: profile.ID,
+		aalContextKey:      aal,
 		"email":            profile.Email,
 		"display_name":     profile.DisplayName,
 	}
@@ -786,11 +814,17 @@ func (s *service) buildIDTokenClaims(profile *IdentityProfile) map[string]any {
 	return claims
 }
 
-func (s *service) buildAccessTokenClaims(profile *IdentityProfile) map[string]any {
+// buildAccessTokenClaims carries the login's assurance level, recorded in the login context, as `acr`.
+func (s *service) buildAccessTokenClaims(profile *IdentityProfile, consentContext interface{}) map[string]any {
 	claims := map[string]any{
 		"email":            profile.Email,
 		"display_name":     profile.DisplayName,
 		identityContextKey: profile.ID,
+	}
+	if values, ok := consentContext.(map[string]any); ok {
+		if aal, ok := values[aalContextKey].(string); ok && aal != "" {
+			claims["acr"] = aal
+		}
 	}
 	if profile.MatrixUserID != "" {
 		claims["matrix_user_id"] = profile.MatrixUserID
@@ -904,62 +938,6 @@ func readIdentityID(ctx interface{}) string {
 		}
 	}
 	return ""
-}
-
-func ensureLoginContextIdentity(ctx interface{}, identityID string) interface{} {
-	identityID = strings.TrimSpace(identityID)
-	if identityID == "" {
-		return ctx
-	}
-
-	switch value := ctx.(type) {
-	case map[string]any:
-		if existing, ok := value[identityContextKey]; ok {
-			existingID := strings.TrimSpace(fmt.Sprint(existing))
-			if existingID == identityID {
-				return value
-			}
-		}
-
-		clone := make(map[string]any, len(value)+1)
-		for key, val := range value {
-			clone[key] = val
-		}
-		clone[identityContextKey] = identityID
-		return clone
-	case nil:
-		return map[string]any{identityContextKey: identityID}
-	default:
-		return map[string]any{identityContextKey: identityID}
-	}
-}
-
-func readLoginContext(req *hydraAdmin.OAuth2LoginRequest) interface{} {
-	if req == nil {
-		return nil
-	}
-
-	if req.AdditionalProperties == nil {
-		return nil
-	}
-
-	if ctx, ok := req.AdditionalProperties["context"]; ok {
-		return ctx
-	}
-
-	return nil
-}
-
-func isKratosIdentityID(value string) bool {
-	if value == "" {
-		return false
-	}
-
-	if _, err := uuid.Parse(value); err != nil {
-		return false
-	}
-
-	return true
 }
 
 func classifyAlkemioErrorType(err error) string {

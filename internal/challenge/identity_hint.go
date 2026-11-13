@@ -7,21 +7,27 @@ import (
 
 type identityHintContextKey struct{}
 
-// IdentityHintProvider supplies a fallback identity identifier when Hydra omits the subject.
-type IdentityHintProvider interface {
-	// IdentityHint returns the identity ID from the provider.
-	IdentityHint(ctx context.Context) (string, error)
+// SessionAssurance is the live Kratos session behind a login: its identity and authenticator assurance level.
+type SessionAssurance struct {
+	IdentityID string
+	AAL        string
 }
 
-type identityHintFunc func(context.Context) (string, error)
+// IdentityHintProvider reads the live Kratos session of the browser completing a login.
+type IdentityHintProvider interface {
+	// IdentityHint returns the session's identity and assurance level.
+	IdentityHint(ctx context.Context) (SessionAssurance, error)
+}
+
+type identityHintFunc func(context.Context) (SessionAssurance, error)
 
 // IdentityHint proxies the call to the wrapped function.
-func (f identityHintFunc) IdentityHint(ctx context.Context) (string, error) {
+func (f identityHintFunc) IdentityHint(ctx context.Context) (SessionAssurance, error) {
 	return f(ctx)
 }
 
 // IdentityHintFunc wraps a function to satisfy IdentityHintProvider.
-func IdentityHintFunc(fn func(context.Context) (string, error)) IdentityHintProvider {
+func IdentityHintFunc(fn func(context.Context) (SessionAssurance, error)) IdentityHintProvider {
 	if fn == nil {
 		return nil
 	}
@@ -50,6 +56,7 @@ func IdentityHintProviderFromContext(ctx context.Context) IdentityHintProvider {
 
 // Sentinel errors surfaced by identity hint providers.
 var (
-	ErrIdentitySessionRequired = errors.New("identity session required")
-	ErrIdentitySessionInvalid  = errors.New("identity session invalid")
+	ErrIdentitySessionRequired     = errors.New("identity session required")
+	ErrIdentitySessionInvalid      = errors.New("identity session invalid")
+	ErrIdentitySessionAAL2Required = errors.New("identity session requires a second factor")
 )

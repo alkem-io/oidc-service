@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -139,16 +140,16 @@ func TestLoginHandlerProvidesSessionHint(t *testing.T) {
 			resolveLogin: func(ctx context.Context, _ string) (*challenge.Resolution, error) {
 				provider := challenge.IdentityHintProviderFromContext(ctx)
 				require.NotNil(t, provider)
-				id, err := provider.IdentityHint(ctx)
+				assurance, err := provider.IdentityHint(ctx)
 				require.NoError(t, err)
-				require.Equal(t, "identity-id", id)
+				require.Equal(t, challenge.SessionAssurance{IdentityID: "identity-id", AAL: "aal2"}, assurance)
 				return &challenge.Resolution{RedirectURL: "https://redirect"}, nil
 			},
 		},
-		SessionResolver: sessionResolverStub{resolve: func(_ context.Context, session string) (string, error) {
+		SessionResolver: sessionResolverStub{resolve: func(_ context.Context, session string) (challenge.SessionAssurance, error) {
 			resolverCalled = true
 			require.Equal(t, "session-token", session)
-			return "identity-id", nil
+			return challenge.SessionAssurance{IdentityID: "identity-id", AAL: "aal2"}, nil
 		}},
 	})
 
@@ -232,6 +233,37 @@ func TestLoginHandlerRedirectsToKratosLoginWhenSessionInvalid(t *testing.T) {
 
 	require.Equal(t, http.StatusFound, rec.Code)
 	require.Equal(t, "https://kratos.example/self-service/login/browser?return_to=https%3A%2F%2Fapp.example%2Fv1%2Foidc%2Flogin%3Flogin_challenge%3Dtest", rec.Header().Get("Location"))
+}
+
+func TestLoginHandlerRedirectsToSecondFactorPreservingChallenge(t *testing.T) {
+	handler := NewLoginHandler(LoginHandlerConfig{
+		Logger: zap.NewNop(),
+		Challenge: &challengeServiceStub{
+			resolveLogin: func(_ context.Context, challengeID string) (*challenge.Resolution, error) {
+				return nil, challenge.NewSessionAAL2RequiredError(challengeID)
+			},
+		},
+		KratosBrowserURL: "https://kratos.example",
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/oidc/login?login_challenge=pending-challenge", nil)
+	req.Host = appExampleHost
+	req.Header.Set(forwardedProtoHeader, "https")
+	rec := httptest.NewRecorder()
+
+	handler.Handle(rec, req)
+
+	require.Equal(t, http.StatusFound, rec.Code)
+	location, err := url.Parse(rec.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "kratos.example", location.Host)
+	require.Equal(t, "/self-service/login/browser", location.Path)
+	require.Equal(t, "aal2", location.Query().Get("aal"))
+
+	returnTo, err := url.Parse(location.Query().Get("return_to"))
+	require.NoError(t, err)
+	require.Equal(t, "https://app.example/v1/oidc/login", returnTo.Scheme+"://"+returnTo.Host+returnTo.Path)
+	require.Equal(t, "pending-challenge", returnTo.Query().Get("login_challenge"))
 }
 
 func TestLoginHandlerRedirectsToKratosLoginWithForwardedPrefix(t *testing.T) {
@@ -329,12 +361,12 @@ func TestLoginHandlerRedirectsToKratosLoginWithBrowserPathPrefix(t *testing.T) {
 }
 
 type sessionResolverStub struct {
-	resolve func(ctx context.Context, session string) (string, error)
+	resolve func(ctx context.Context, session string) (challenge.SessionAssurance, error)
 }
 
-func (s sessionResolverStub) IdentityID(ctx context.Context, session string) (string, error) {
+func (s sessionResolverStub) Resolve(ctx context.Context, session string) (challenge.SessionAssurance, error) {
 	if s.resolve == nil {
-		return "", challenge.ErrIdentitySessionRequired
+		return challenge.SessionAssurance{}, challenge.ErrIdentitySessionRequired
 	}
 	return s.resolve(ctx, session)
 }

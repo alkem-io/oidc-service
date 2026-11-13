@@ -76,6 +76,16 @@ func TestACRValuesIgnoredEndToEnd(t *testing.T) {
 	resp, err := client.Get(strings.TrimRight(public, "/") + "/oauth2/auth?" + params.Encode()) //nolint:gosec // G704: target comes from HYDRA_PUBLIC_URL test env
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
-	require.Less(t, resp.StatusCode, 400,
+
+	// Hydra refuses an authorization request by redirecting with OAuth error
+	// parameters, so only a redirect into the login flow counts as accepted.
+	require.Contains(t, []int{http.StatusFound, http.StatusSeeOther}, resp.StatusCode,
 		"acr_values MUST be accepted (and ignored), got %d", resp.StatusCode)
+	location, err := resp.Location()
+	require.NoError(t, err)
+	query := location.Query()
+	require.False(t, query.Has("error"),
+		"acr_values MUST be accepted (and ignored), got error redirect %s", location)
+	require.NotEmpty(t, query.Get("login_challenge"),
+		"acr_values MUST lead to the login flow, got redirect %s", location)
 }

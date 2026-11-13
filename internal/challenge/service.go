@@ -300,13 +300,13 @@ func (s *service) emitRememberedLoginRejectAudit(
 	}
 	client := req.GetClient()
 	if err := s.audit.Emit(audit.Event{
-		EventType:     "login.remembered_reject",
-		Outcome:       audit.OutcomeFailure,
-		Sub:           strings.TrimSpace(req.GetSubject()),
-		ActorID:       sessionIdentityID,
-		ClientID:      strings.TrimSpace(client.GetClientId()),
-		CorrelationID: requestid.FromContext(ctx),
-		ErrorCode:     "login_required",
+		EventType:         "login.remembered_reject",
+		Outcome:           audit.OutcomeFailure,
+		Sub:               strings.TrimSpace(req.GetSubject()),
+		SessionIdentityID: sessionIdentityID,
+		ClientID:          strings.TrimSpace(client.GetClientId()),
+		CorrelationID:     requestid.FromContext(ctx),
+		ErrorCode:         "login_required",
 	}); err != nil {
 		s.logger.Warn("emit login.remembered_reject audit failed", "error", err)
 	}

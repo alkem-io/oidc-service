@@ -30,17 +30,17 @@ type Event struct {
 	EventType string  `json:"event_type"`
 	Outcome   Outcome `json:"outcome"`
 	Sub       string  `json:"sub,omitempty"`
-	// ActorID is the identity of the live session that acted, set when it differs from Sub.
-	ActorID        string `json:"actor_id,omitempty"`
-	ClientID       string `json:"client_id,omitempty"`
-	CorrelationID  string `json:"correlation_id"`
-	RequestID      string `json:"request_id"`
-	Timestamp      string `json:"timestamp"`
-	ErrorCode      string `json:"error_code,omitempty"`
-	RequestedScope string `json:"requested_scope,omitempty"`
-	GrantedScope   string `json:"granted_scope,omitempty"`
-	TruncatedInput string `json:"truncated_input,omitempty"`
-	RpID           string `json:"rp_id,omitempty"`
+	// SessionIdentityID is the Kratos identity of the live session that acted, set when it differs from Sub.
+	SessionIdentityID string `json:"session_identity_id,omitempty"`
+	ClientID          string `json:"client_id,omitempty"`
+	CorrelationID     string `json:"correlation_id"`
+	RequestID         string `json:"request_id"`
+	Timestamp         string `json:"timestamp"`
+	ErrorCode         string `json:"error_code,omitempty"`
+	RequestedScope    string `json:"requested_scope,omitempty"`
+	GrantedScope      string `json:"granted_scope,omitempty"`
+	TruncatedInput    string `json:"truncated_input,omitempty"`
+	RpID              string `json:"rp_id,omitempty"`
 }
 
 // Emitter serialises one Event to one JSON line and writes it to the

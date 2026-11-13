@@ -66,6 +66,7 @@ func TestACRValuesIgnoredEndToEnd(t *testing.T) {
 	params.Set("response_type", "code")
 	params.Set("redirect_uri", "http://localhost:3000/api/auth/oidc/callback")
 	params.Set("scope", "openid")
+	params.Set("state", "acr-values-contract")
 	params.Set("code_challenge_method", "S256")
 	params.Set("code_challenge", "Fe3Bd7VOAVrgHDN-2xdGiaakY0P6WTCxlFQrLyhPBYI")
 	params.Set("acr_values", "urn:mace:incommon:iap:silver")

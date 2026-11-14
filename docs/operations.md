@@ -162,6 +162,12 @@ The service enhances OIDC tokens with user profile and compliance claims. Rely o
    - **Validation**: Must be a canonical UUID; missing/invalid values block consent/login resolution with `alkemio_resolution_failed`
    - **Observability**: Success paths log `resolved alkemio identity mapping` with masked IDs; failures emit `failed to resolve alkemio identity mapping` or `received invalid alkemio identity mapping` entries
 
+5. **Assurance Level** (`acr`, workspace#103):
+   - **Source**: Kratos `whoami` `authenticator_assurance_level` (`aal1` or `aal2`) of the live session read when the Hydra login is accepted
+   - **Tokens**: Both ID tokens and access tokens; the ID token gets it from the login acceptance, the access token from the login context at consent
+   - **Top level**: The access-token claim sits at the top level only when Hydra's `oauth2.allowed_top_level_claims` lists `acr`; otherwise Hydra nests it under `ext`
+   - **Lifetime**: Fixed at sign-in and carried through refresh; a second-factor reset takes effect when the subject's Hydra consent sessions are revoked
+
 ### Troubleshooting Token Claims
 
 1. **Missing Claims**:

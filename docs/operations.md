@@ -166,7 +166,7 @@ The service enhances OIDC tokens with user profile and compliance claims. Rely o
    - **Source**: Kratos `whoami` `authenticator_assurance_level` (`aal1` or `aal2`) of the live session read when the Hydra login is accepted
    - **Tokens**: Both ID tokens and access tokens; the ID token gets it from the login acceptance, the access token from the login context at consent
    - **Top level**: The access-token claim sits at the top level only when Hydra's `oauth2.allowed_top_level_claims` lists `acr`; otherwise Hydra nests it under `ext`
-   - **Lifetime**: Fixed at sign-in and carried through refresh; a second-factor reset takes effect when the subject's Hydra consent sessions are revoked
+   - **Lifetime**: Fixed at sign-in and carried through refresh. A second-factor reset does not revoke Hydra grants: support revokes the subject's Hydra consent sessions by hand, and an access token already issued stays valid until it expires (at most 10 minutes)
 
 ### Troubleshooting Token Claims
 

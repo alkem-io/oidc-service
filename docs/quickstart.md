@@ -183,11 +183,9 @@ ships with the following workflows under `.github/workflows/`:
   environment via `workflow_dispatch`.
 - `schema-contract.yml` — lints the OpenAPI contract and diff-checks pull
   requests touching `contracts/` or documentation.
-- `trigger-e2e-tests.yml` — notifies the external `alkem-io/test-suites`
-  repository to execute end-to-end verification on release publication.
 
-Consult the repository secrets to ensure Docker registry and Travis API tokens
-are available before invoking the release or deployment workflows.
+Consult the repository secrets to ensure the Docker registry token
+is available before invoking the release or deployment workflows.
 
 ## 10. Docstring Coverage Tool
 
